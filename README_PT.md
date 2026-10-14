@@ -97,31 +97,61 @@ Os gráficos actualizam-se em tempo real, sem recarregar a página.
 
 ---
 
-## ⚙️ Instalação
+## ⚡ Início Rápido
 
-**Requisitos:** Python 3.9+ e um nó Meshtastic acessível por TCP
-(`meshtasticd` ou um nó Wi-Fi) ou ligado por USB.
+**Precisa de:** Python 3.9 ou mais recente, e um nó Meshtastic acessível por
+TCP (`meshtasticd` ou um nó Wi-Fi) ou ligado por USB.
+
+```bash
+git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
+cd meshdeck
+python3 install.py          # no Windows: py install.py
+```
+
+O instalador guia-o passo a passo:
+
+1. Cria um ambiente Python (`.venv`) e instala as dependências
+2. Pergunta o **idioma**, se quer **abrir o servidor à rede** (para o usar no
+   telemóvel) e a **porta**
+3. Define a **password** — a sua, ou uma aleatória mostrada uma vez
+4. Pergunta **como chegar ao nó**: `meshtasticd` na mesma máquina, outro
+   endereço, uma porta USB (mostra-lhe a lista) ou mais tarde no browser
+5. Activa opcionalmente o **HTTPS** para a bússola do telemóvel
+6. Cria um **atalho de arranque** — `start.sh` (Linux/macOS) ou `start.bat`
+   (Windows) — e mostra os endereços a abrir
+
+A partir daí, arranque o servidor com:
+
+```bash
+./start.sh                  # no Windows: start.bat
+```
+
+Pode correr o `install.py` outra vez quando quiser mudar estas definições; o
+que já está instalado é reaproveitado.
+
+> No Debian, Ubuntu e Raspberry Pi OS (incluindo o uConsole), se o instalador
+> não conseguir criar o ambiente, instale primeiro o `python3-venv`:
+> `sudo apt install python3-venv`.
+
+---
+
+## ⚙️ Instalação Manual
+
+Se preferir fazer à mão:
 
 ```bash
 git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
 cd meshdeck
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### No uConsole CM4 (Debian/Raspberry Pi OS)
-
-```bash
-sudo apt install python3-venv
-python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # no Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ---
 
-## ▶️ Arranque
+## ▶️ Arranque Manual
+
+Com o `.venv` activo (ou através do `start.sh`, que aceita as mesmas opções):
 
 ```bash
 python3 run_server.py
@@ -253,6 +283,7 @@ vista da lista de nós) ficam no respectivo browser.
 
 ```
 meshdeck/
+├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, atalho)
 ├── run_server.py          ← Ponto de entrada e opções da linha de comandos
 ├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
 ├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas

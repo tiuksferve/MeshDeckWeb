@@ -97,31 +97,61 @@ Charts update live, without reloading the page.
 
 ---
 
-## ⚙️ Installation
+## ⚡ Quick Start
 
-**Requirements:** Python 3.9+ and a Meshtastic node reachable over TCP
+**You need:** Python 3.9 or newer, and a Meshtastic node reachable over TCP
 (`meshtasticd` or a Wi-Fi node) or connected by USB.
 
 ```bash
 git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
 cd meshdeck
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python3 install.py          # on Windows: py install.py
 ```
 
-### On the uConsole CM4 (Debian/Raspberry Pi OS)
+The installer guides you step by step:
+
+1. Creates a Python environment (`.venv`) and installs the dependencies
+2. Asks the **language**, whether to **open the server to your network** (to use
+   it from your phone) and the **port**
+3. Sets the **password** — yours, or a random one shown once
+4. Asks **how to reach the node**: `meshtasticd` on the same machine, another
+   address, a USB port (listed for you) or later in the browser
+5. Optionally enables **HTTPS** for the phone compass
+6. Creates a **start shortcut** — `start.sh` (Linux/macOS) or `start.bat`
+   (Windows) — and shows the addresses to open
+
+From then on, start the server with:
 
 ```bash
-sudo apt install python3-venv
+./start.sh                  # on Windows: start.bat
+```
+
+Run `install.py` again at any time to change these settings; what is already
+installed is reused.
+
+> On Debian, Ubuntu and Raspberry Pi OS (including the uConsole), if the
+> installer cannot create the environment, install `python3-venv` first:
+> `sudo apt install python3-venv`.
+
+---
+
+## ⚙️ Manual Installation
+
+If you prefer to do it by hand:
+
+```bash
+git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
+cd meshdeck
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # on Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ---
 
-## ▶️ Running
+## ▶️ Running by Hand
+
+With the `.venv` active (or through `start.sh`, which accepts the same options):
 
 ```bash
 python3 run_server.py
@@ -250,6 +280,7 @@ list view) stay in each browser.
 
 ```
 meshdeck/
+├── install.py             ← Guided setup (venv, password, node, HTTPS, start shortcut)
 ├── run_server.py          ← Entry point and command-line options
 ├── server/                ← Flask + Socket.IO: HTTP API, login, HTTPS, serial bridge
 ├── core/                  ← Node connection, nodes, messages, configuration, metrics

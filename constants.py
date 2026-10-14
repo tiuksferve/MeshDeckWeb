@@ -15,7 +15,7 @@ logging.getLogger("meshtastic").setLevel(logging.WARNING)
 logging.getLogger("pubsub").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-logger = logging.getLogger("MeshtasticGUI")
+logger = logging.getLogger("MeshDeck")
 
 DARK_BG        = "#0d1117"
 PANEL_BG       = "#161b22"

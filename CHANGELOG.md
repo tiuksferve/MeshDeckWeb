@@ -51,6 +51,12 @@ desktop application is removed.
   - New section **🌡 Environment & Power**: environment, air quality and INA
     power sensors, with a temperature chart.
 
+- **🧰 Guided installer** (`install.py`, Linux/macOS/Windows): creates the
+  virtual environment, installs the dependencies and configures the first
+  run — language, network access and port, password, node connection (TCP or
+  a listed USB port), optional HTTPS — then writes a `start.sh`/`start.bat`
+  shortcut.
+
 - **🧪 Test suite** under `tests/` (pytest).
 
 ### Changed

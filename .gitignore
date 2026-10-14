@@ -18,6 +18,10 @@ env/
 # scratch
 scratch/
 
+# Atalhos de arranque gerados pelo install.py
+start.sh
+start.bat
+
 # User data
 # Nota: não usar "*.json" aqui. O frontend web traz ficheiros JSON versionados
 # (i18n exportado, assets vendorizados) e o padrão abrangente excluía-os em
