@@ -25,10 +25,13 @@ class MetricsRenderMixin:
     """
 
     def _base_html(self, title: str, body: str) -> str:
-        """Template HTML base com Chart.js e estilos."""
+        """Template HTML base com Chart.js e estilos.
+
+        O Chart.js vem da cópia em web/vendor (servida pelo próprio servidor),
+        para os gráficos funcionarem sem internet."""
         return f"""<!DOCTYPE html><html><head>
 <meta charset="utf-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.min.js"></script>
 <script>if(window.Chart){{Chart.defaults.animation=false;}}</script>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}

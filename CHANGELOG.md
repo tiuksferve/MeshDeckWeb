@@ -6,6 +6,90 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.0.0-beta] — 2026-10-14
+
+MeshDeck becomes **MeshDeckWeb**: a Python server keeps the connection to the
+node and serves a browser interface, used mainly from a phone. The PyQt5
+desktop application is removed.
+
+### Added
+
+- **🌐 Web server and browser interface:**
+  - `run_server.py` with Flask + Socket.IO; any number of browsers stay in sync
+    in real time.
+  - Password login (generated on first run, `--set-password` to change it),
+    remembered per browser.
+  - Responsive interface designed for the iPhone, also used on desktop browsers.
+  - Node list as cards or a compact table, map, messages, navigation,
+    traceroute, metrics and full node configuration, in English and Português.
+
+- **🔒 HTTPS alongside HTTP:**
+  - `--make-cert` creates a local certificate authority and a server
+    certificate; HTTPS is served on a second port (default `8443`) while plain
+    HTTP keeps working on the main port.
+  - `/ca.crt` lets phones and PCs install the CA; regenerating the server
+    certificate keeps the CA.
+  - `--https-port`, `--tls-cert`/`--tls-key` and `--no-tls`.
+
+- **🧭 Device compass:** on phones and tablets the navigation compass follows
+  the device heading and points at the selected node (requires HTTPS).
+
+- **💬 Messages:** replies using the native Meshtastic `reply_id`, message
+  sound with a per-device switch, subtle tint for messages received over RF.
+
+- **🗺 Map:** hybrid satellite theme with place names and roads, colour legend
+  in each node's popup, traceroute sheet over the map on phones.
+
+- **📊 New metrics:**
+  - RF Quality: RSSI, per-packet hops (`hop_start − hop_limit`), hop limit
+    exhausted, SNR × RSSI table per node with a noise/weak-signal hint.
+  - Local Node: radio health from **LocalStats** (duplicates, corrupted
+    packets, noise floor, relays, dropped TX, nodes online) and the
+    meshtasticd host from **HostMetrics** (load, memory, disk).
+  - Range & Links: direct range (0 hops) from the local node and who relays
+    the most (`relay_node`, firmware 2.6+).
+  - New section **🌡 Environment & Power**: environment, air quality and INA
+    power sensors, with a temperature chart.
+
+- **🧪 Test suite** under `tests/` (pytest).
+
+### Changed
+
+- **🧱 Architecture:** node connection, messages, nodes, configuration and
+  metrics moved to `core/`, independent of any interface.
+- **🔑 PSK input** accepts Base64, URL-safe Base64, the `base64:` prefix and hex.
+- **📈 Metrics:** SNR and hops count only packets heard by the local radio
+  (MQTT packets and the node's own echoes are excluded); Range & Links,
+  RF Quality and Environment update live.
+- **📴 Works offline:** the metrics load Chart.js from the copy bundled with
+  the server instead of a CDN; only the map background needs internet.
+- **📦 Requirements:** Flask, Flask-SocketIO, simple-websocket and
+  cryptography replace PyQt5 and PyQtWebEngine.
+
+### Fixed
+
+- **📊 Metrics:**
+  - Duty cycle no longer multiplied by 6 — `airUtilTx` is already the
+    percentage of the last hour.
+  - In the server, each packet was counted two or three times (totals, SNR,
+    duplicates).
+  - Node data without a packet (NodeDB batch, local node) was discarded;
+    battery, names and positions now reach the metrics immediately.
+  - Channel table columns misaligned on first render; airtime KPI not updating.
+  - Channel messages stayed "pending" forever; delivery rate now counts DMs only.
+  - Misleading "healthy flood" rating from client-side duplicates removed;
+    real duplicates come from LocalStats.
+  - Local Node script broken by a raw newline, which stopped its live uptime.
+- **🌐 Translations:** texts that stayed in Portuguese with English selected,
+  including server and configuration errors.
+
+### Removed
+
+- **🖥 PyQt5 desktop application** (`main.py`, `dialogs.py`, `models.py`,
+  `worker.py`, `tabs/`). The 1.x releases remain available in the history.
+
+---
+
 ## [1.0.5-beta] — 2026-07-09
 
 ### Fixed

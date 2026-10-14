@@ -396,3 +396,12 @@ def test_power_channels_and_page_render(metrics):
 def test_environment_ignores_nan_from_faulty_sensors(metrics):
     metrics.ingest_raw_packet(env(temperature=float("nan"), relativeHumidity=40.0))
     assert metrics._env[PEER_ID]["values"] == {"relativeHumidity": 40.0}
+
+
+def test_metric_pages_load_no_external_scripts(metrics):
+    """Os gráficos têm de funcionar sem internet: nada de CDNs."""
+    import re
+    for key in SECTION_KEYS:
+        page = metrics.html_for(key)
+        assert not re.search(r"""<script[^>]+src=["']https?://""", page), key
+        assert "/vendor/chart.umd.min.js" in page, key

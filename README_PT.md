@@ -1,199 +1,251 @@
-# 📡 MeshDeck — uConsole CM4
+# 📡 MeshDeckWeb
 
-Interface gráfica avançada para monitorização, comunicação e configuração de redes
-[Meshtastic](https://meshtastic.org) via TCP ou USB Serial directo.  
-Desenvolvida e optimizada para o **ClockworkPi uConsole CM4**, mas funciona em
-qualquer sistema Linux/macOS/Windows com Python 3 e PyQt5.
+Interface web para monitorizar, comunicar e configurar redes
+[Meshtastic](https://meshtastic.org) — a partir do telemóvel, de um tablet ou
+de qualquer browser na sua rede.
 
-**Versão:** 1.0.5-beta &nbsp;·&nbsp; **Callsign:** CT7BRA &nbsp;·&nbsp; **Ano:** 2026
+Um pequeno servidor em Python mantém a ligação ao nó (TCP ao `meshtasticd` ou
+USB Serial directo) e serve a interface. Desenvolvido e optimizado para o
+**ClockworkPi uConsole CM4**, funciona em qualquer máquina Linux/macOS/Windows
+com Python 3; a interface foi pensada primeiro para o iPhone e funciona
+igualmente bem num browser de computador.
 
----
+**Versão:** 2.0.0-beta &nbsp;·&nbsp; **Callsign:** CT7BRA &nbsp;·&nbsp; **Ano:** 2026
 
-## 🌐 Idiomas
-
-A interface suporta **Português** e **English**, seleccionáveis no diálogo de
-ligação. A preferência é guardada entre sessões via `QSettings`.
+> O MeshDeckWeb substitui a aplicação desktop original em PyQt5 (MeshDeck 1.x).
+> A lógica do nó, a escrita da configuração e as métricas mantiveram-se e
+> passaram para um núcleo partilhado; a janela desktop deixou de existir.
+> Ver o [CHANGELOG](CHANGELOG.md).
 
 ---
 
 ## 🚀 Funcionalidades
 
-### 📋 Lista de Nós em Tempo Real
+### 📋 Nós
 
-- Lista completa de todos os nós visíveis na rede com actualização automática
-- **Colunas:** ID String, ID Num, Nome Longo, Nome Curto, Último Contacto, SNR,
-  Hops, Via (RF/MQTT), Latitude, Longitude, Altitude (m), Bateria (%), Modelo HW,
-  Último Tipo de Pacote
-- **Nó local fixado no topo** com fundo âmbar e prefixo 🏠
-- **Favoritos** geridos directamente no firmware (⭐), fixados abaixo do nó local
-- Pesquisa em tempo real por ID, nome longo ou nome curto
-- Duplo clique para ver detalhes completos do último pacote recebido
-- **Acções rápidas directamente da lista:**
-  - 📧 Enviar DM — PKI (E2E) quando a chave pública é conhecida, PSK como fallback
-  - 🗺 Centrar no mapa
-  - 📡 Enviar traceroute
-- Barra de dica inferior com legenda dos ícones
-- Contadores de nós: total e activos (últimas 2 horas)
-- **Feedback de estado imediato** enquanto conecta e carrega os nós
+- Todos os nós visíveis, actualizados em tempo real, com o **nó local** e os
+  **favoritos** (guardados no firmware do nó) fixos no topo
+- **Cartões** no telemóvel e no computador, ou uma **tabela** compacta no computador
+- Ponto de frescura colorido, SNR, hops, bateria, MQTT/RF e modelo de hardware
+- Acções rápidas: ⭐ favorito · 💬 DM · 📍 ver no mapa · 📡 traceroute ·
+  ℹ️ detalhe do último pacote
+- Pesquisa por ID, nome longo ou nome curto
 
-### 🗺 Mapa Interactivo (Leaflet)
+### 🗺 Mapa (Leaflet)
 
-- **4 temas de mapa:** 🌑 Escuro · ☀ Claro · 🗺 OpenStreetMap · 🛰 Satélite
-- **Marcadores coloridos por estado:**
-  - 🟢 Verde — nó seleccionado
-  - 🔴 Vermelho — pacote recebido agora
-  - 🔵 Azul — activo via RF
-  - 🟠 Laranja — via MQTT
-  - ⚫ Cinzento — inactivo (>2h)
-- **Traceroutes** com linhas verdes sólidas (ida/volta) e tooltips de SNR por segmento
-- **Vizinhança NeighborInfo** — linhas roxas pontilhadas entre pares de nós vizinhos
-- **Legenda integrada** no canto inferior direito do mapa
-- Popup por nó com informações completas e botão de Traceroute inline
-- Painel esquerdo com lista de traceroutes (checkboxes)
+- Temas: 🌑 Escuro · ☀ Claro · 🛰 Satélite (híbrido, com localidades e estradas)
+- Marcadores coloridos por estado — seleccionado, pacote acabado de receber,
+  RF activo, MQTT, inactivo (>2 h) — com a legenda da cor no popup de cada nó
+- Traceroutes com SNR por segmento, ligações NeighborInfo
+- No telemóvel, o tema e a lista de traceroutes abrem numa folha sobre o mapa
 
 ### 💬 Mensagens
 
-- **Canais** múltiplos (Primary + Secondary, índices 0-7) com contador de não lidos
-- **Mensagens Directas (DM):**
-  - 🔒 **PKI** (E2E encriptado) quando a chave pública do destinatário é conhecida
-  - 🔓 **PSK** (chave de canal) como fallback automático
-  - Lista de DMs ordenada pela mensagem mais recente
-- Indicador ACK/NAK por mensagem enviada
-- Suporte a mensagens MQTT (☁)
-- Badge 🔴 na aba de Mensagens para mensagens não lidas
-- Separadores de data nas conversas ("Hoje", "Ontem", data exacta)
+- Canais (índices 0–7) e mensagens directas, com contadores de não lidas
+- DMs cifradas com **PKI** quando a chave pública é conhecida, **PSK** caso contrário
+- **Respostas** (↩) com o `reply_id` nativo do Meshtastic, visíveis também noutras apps
+- ACK/NAK por mensagem enviada, tom discreto nas mensagens recebidas por RF
+- **Som de mensagem**, que pode ser desligado em cada dispositivo
 
 ### 🧭 Navegação
 
-- **Bússola** — rumo e distância em tempo real do nó local para qualquer nó remoto seleccionado
-- **Caixa Nó Local** — nome, ID, coordenadas GPS, altitude, estado GPS, e botão
-  **🔄 Posição** para reler as coordenadas GPS do nó em qualquer momento:
-  - Lê da cache do daemon (`nodesByNum`) — actualizada com cada pacote GPS recebido
-  - Fallback para `localConfig.position.fixed_lat/lon` em nós com posição fixa
-  - Mostra `⏳ A ler posição…` enquanto activo; aviso de 3 segundos se sem posição
-- **Caixa Alvo** — nome, distância, SNR (verde/laranja/vermelho), altitude, direcção cardinal
-- **Tabela de nós GPS** — todos os nós com GPS conhecido, ordenados por distância
-- Avisos de estado GPS: activo com fix, activo sem fix, desactivado
+- Bússola com rumo e distância até ao nó seleccionado
+- **Bússola do dispositivo** em telemóveis e tablets: a rosa roda para o norte
+  real e a agulha aponta para o nó, ficando verde quando está em frente
+  (requer HTTPS — ver abaixo)
+- Cartão do nó local com actualização do GPS, e todos os nós com GPS ordenados
+  por distância, cada um com um botão 📍 para o abrir no mapa
 
-### 🗺 Traceroutes
+### 📡 Traceroute
 
-- Envio de traceroute para qualquer nó da lista ou popup do mapa
-- Diálogo de resultado com hops de ida e volta, SNR por segmento, indicadores GPS
-- Botão "Mostrar no Mapa" (quando o destino tem GPS)
-- Cooldown de 30s entre traceroutes
-- Notificação quando um traceroute dirigido ao nó local é recebido
+- A partir da lista de nós ou do mapa, com hops de ida e volta, SNR por hop e
+  botão "Mostrar no Mapa"; 30 s entre traceroutes
 
-### ⚙️ Configuração Completa do Nó
+### ⚙️ Configuração do Nó
 
-- **Canais:** nome, PSK (Base64/hex/aleatório), papel, uplink/downlink MQTT, silenciar, precisão posição
-- **Utilizador:** nome longo, nome curto, licenciado Ham (via `setOwner`) — só guardado quando os valores mudam
-- **Todas as 21 secções de configuração do firmware** (Dispositivo, Posição/GPS, Energia,
-  Rede/WiFi, Display, LoRa, Bluetooth, MQTT, Serial, Notif. Externa, Store & Forward,
-  Range Test, Telemetria, Msgs Pré-definidas, Audio/Codec2, Hardware Remoto,
-  Neighbor Info, Ilum. Ambiente, Sensor Detecção, Paxcounter, Segurança)
-- **Transacção atómica** — firmware reinicia apenas uma vez após guardar tudo
-  (`beginSettingsTransaction` / `commitSettingsTransaction`)
-- **Save correcto para proto3:** campos bool `False` são serializados via double-set
-  para garantir que chegam ao firmware (mesmo sendo o valor por defeito do protobuf)
-- **Lista de campos validada:** todos os campos confirmados contra `config.proto`
-  e `module_config.proto` oficiais; campos inexistentes removidos
-- **Confirmação detalhada do save:** mostra exactamente que `writeConfig()`, `setOwner`
-  e `setCannedMessages` foram enviados ao nó
-- Reconstrução automática da UI ao mudar idioma
-- `proxy_to_client_enabled` mostrado como read-only com nota explicativa
-  (requer protocolo `mqttClientProxyMessage` — previsto para versão futura)
+- **As 21 secções do firmware**, geradas a partir de um esquema validado contra
+  o `config.proto` e o `module_config.proto`
+- Uma **transacção** por gravação, para o firmware reiniciar uma só vez
+- **Canais:** nome, papel, uplink/downlink, precisão da posição e PSK — colada
+  em Base64, Base64 URL-safe, com prefixo `base64:` ou em hex
+- Dono (nome longo/curto, licenciado)
 
-### 📊 Métricas em Tempo Real (11 Secções)
+### 📊 Métricas (12 secções)
 
-Actualização automática a cada 5 segundos. A secção Nó Local recarrega quando os dados mudam (hash MD5); as restantes actualizam via JavaScript sem recarregar o HTML.
+Os gráficos actualizam-se em tempo real, sem recarregar a página.
 
-| Secção | Tipo | O que mede |
-|--------|------|-----------|
-| 📊 Visão Geral | Misto | Pacotes, nós activos, SNR, taxa entrega, airtime |
-| 🏠 Nó Local | 🏠 Local | Bateria, Ch. Util., Air TX, duty cycle/h (limite EU), SNR RX, msgs enviadas/ACK/NAK, RTT, uptime (contador live), GPS |
-| 📡 Canal & Airtime | 🌐 Rede | Ch. utilization, airtime TX, duty cycle EU (ETSI EN300.220) |
-| 📶 Qualidade RF | 🌐 Rede | Histograma SNR, distribuição hops, avaliação automática |
-| 📦 Tráfego | 🌐 Rede | Pacotes por tipo, pacotes/min, RF vs MQTT, padrão routing |
-| 🔋 Nós & Bateria | 🌐 Rede | Bateria, tensão, uptime, modelo hardware, GPS |
-| ✅ Fiabilidade | Misto | ACK/NAK/erros FW separados, taxa entrega, flood windowed, prob. colisão |
-| ⏱ Latência (RTT) | 🏠 Local | RTT médio/mín/máx/P90 entre envio e ACK |
-| 🔗 Vizinhança | 🌐 Rede | Pares de vizinhos directos com SNR (NeighborInfo) |
-| 📏 Alcance & Links | 🌐 Rede | Distância km entre vizinhos com GPS (Haversine) |
-| ⏰ Intervalos | 🌐 Rede | Intervalo médio entre pacotes por nó |
+| Secção | O que mede |
+|--------|-----------|
+| 📊 Visão Geral | Pacotes, nós activos, SNR, hops, taxa de entrega de DMs, airtime |
+| 🏠 Nó Local | Bateria, uso do canal, duty cycle/h, SNR recebido, mensagens, RTT, **saúde do rádio (LocalStats)** e **máquina do meshtasticd (HostMetrics)** |
+| 📡 Canal & Airtime | Utilização do canal e duty cycle horário por nó face ao limite UE de 10 % |
+| 📶 Qualidade RF | SNR e **RSSI** só de pacotes de rádio, hops por pacote, **hop limit esgotado**, tabela SNR × RSSI com indicação de ruído/sinal fraco |
+| 📦 Tráfego | Pacotes por tipo e por minuto, RF vs MQTT, directos vs retransmitidos |
+| 🔋 Nós & Bateria | Bateria, tensão, uptime, modelos de hardware, GPS |
+| 🌡 Ambiente & Energia | Temperatura, humidade, pressão, qualidade do ar e sensores de energia INA, gráfico de temperatura |
+| ✅ Fiabilidade | Entrega de DMs, mensagens de canal confirmadas por retransmissão, duplicados medidos pelo firmware |
+| ⏱ Latência | Tempo de ida e volta até ao ACK: média, mediana, P90 |
+| 🔗 Vizinhança | Pares NeighborInfo com SNR |
+| 📏 Alcance & Links | **Alcance directo** (0 hops) a partir do nó local, **quem mais retransmite**, distâncias dos links NeighborInfo |
+| ⏰ Intervalos | Tempo médio entre pacotes por nó |
 
-**Estabilidade, identidade de nós e traduções na v1.0.5-beta:**
-- **Duplicidade e Nós Fantasma:** Padronização do formato de IDs de nós para lowercase e aplicação de máscara de 32-bit unsigned integer para evitar duplicação errónea.
-- **Prevenção de Reboots:** Envio de dados do utilizador alterado para transmissões manuais em pacotes User do protobuf, evitando reboots físicos indesejados.
-- **Internacionalização (i18n):** Tradução dos rótulos de estado e remetente em mensagens de saída, e adição de chaves de internacionalização outrora em falta (metadados de chat, banners de resposta, status de gravação de config).
-- **Melhorias legadas (v1.0.4):** Deduplicação de nó local, otimização de polling, separação de erros e melhorias de contagem.
-### 🔌 Conectividade e Robustez
+### 🔐 Acesso e Idiomas
 
-- Ligação TCP ao daemon **meshtasticd** (por defeito `localhost:4403`)
-- **Ligação USB Serial** via bridge integrado — sem necessidade de placa AIO
-- **Reconexão automática** com backoff exponencial: 15s → 30s → 60s → 120s
-- Watchdog de 12s por tentativa de conexão
-- Polling de segurança a cada 30s para manter o NodeDB sincronizado
-- **Ligação não bloqueante** — `TCPInterface` adiado via `QTimer.singleShot(50)`
-
-### ⭐ Favoritos
-
-Geridos **directamente no firmware** via `setFavorite()` / `removeFavorite()`.
-Sem ficheiro local — a fonte de verdade é sempre o NodeDB do firmware.
-
-### 🔔 Notificações Sonoras
-
-- Som de notificação ao receber mensagens (activável/desactivável)
-- Cadeia multiplataforma: `aplay` (Linux) → `afplay` (macOS) → `winsound` (Windows) → `QApplication.beep()`
+- Login com password; a sessão pode ficar lembrada em cada browser
+- Vários dispositivos ao mesmo tempo, todos sincronizados em tempo real
+- Português e English, escolhidos no menu ☰
 
 ---
 
-## 🔌 Ligação USB Serial
+## ⚙️ Instalação
 
-O MeshDeck pode conectar directamente a um dispositivo Meshtastic via USB sem
-necessitar da placa AIO nem de um daemon `meshtasticd` a correr.
-
-### Como funciona
-
-Um bridge integrado (`meshtastic_bridge.py`) lê o stream serial do dispositivo,
-filtra ruído de debug/boot, e re-expõe os frames limpos como servidor TCP local
-em `127.0.0.1:4403`.
-
-### Hardware suportado
-
-| Chipset | Placas |
-|---------|--------|
-| Espressif ESP32/S2/S3/C3 | Maioria das placas Meshtastic |
-| Silicon Labs CP210x | HELTEC, LILYGO T-Beam, RAK |
-| FTDI FT232 | Placas DIY e de desenvolvimento |
-| CH340 / CH341 | Placas chinesas de baixo custo |
-| Prolific PL2303 | Clones mais antigos |
-| Adafruit nRF52840 | Feather, ItsyBitsy |
-| RAK Wireless nRF52840 | RAK4631 |
-
-### Como usar
-
-1. Ligar o dispositivo Meshtastic via USB
-2. Abrir **🔌 Conexão…** → aba **🔌 USB Serial**
-3. Seleccionar a porta no dropdown
-4. Clicar **▶ Iniciar Bridge Serial** e aguardar **✅ Bridge activa**
-5. Clicar **🔌 Conectar**
-
-### Requisito adicional
+**Requisitos:** Python 3.9+ e um nó Meshtastic acessível por TCP
+(`meshtasticd` ou um nó Wi-Fi) ou ligado por USB.
 
 ```bash
-pip install pyserial>=3.5
+git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
+cd meshdeck
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Já incluído em `requirements.txt`.
+### No uConsole CM4 (Debian/Raspberry Pi OS)
 
-### Bridge em linha de comandos
+```bash
+sudo apt install python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+---
+
+## ▶️ Arranque
+
+```bash
+python3 run_server.py
+```
+
+Na **primeira execução** é gerada uma password aleatória, mostrada uma única
+vez no console — guarde-a. Para a trocar:
+
+```bash
+python3 run_server.py --set-password
+```
+
+Por omissão o servidor só escuta em `127.0.0.1:8080`. Para o abrir à rede
+local (para o telemóvel):
+
+```bash
+python3 run_server.py --host 0.0.0.0 --port 8080
+```
+
+Depois abra `http://<ip-da-máquina>:8080/` no telemóvel. O endereço e a porta
+escolhidos ficam guardados para as execuções seguintes.
+
+| Opção | O que faz |
+|-------|-----------|
+| `--host`, `--port` | Endereço e porta HTTP (por omissão `127.0.0.1:8080`, depois os guardados) |
+| `--connect` | Ligar ao nó no arranque, sem esperar pelo browser |
+| `--node-host`, `--node-port` | `meshtasticd` a que ligar (por omissão `localhost:4403`) |
+| `--serial /dev/ttyACM0` | Ligar por USB Serial através da ponte incluída |
+| `--set-password` | Definir a password de acesso e sair |
+| `--make-cert [IP …]` | Criar o certificado HTTPS (ver abaixo) e sair |
+| `--https-port` | Porta HTTPS (por omissão `8443`) |
+| `--tls-cert`, `--tls-key` | Usar um certificado próprio |
+| `--no-tls` | Desligar o HTTPS (só HTTP) e sair |
+| `--debug` | Registo detalhado (por exemplo, cada LocalStats recebido) |
+
+> ⚠️ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Abra o
+> servidor só a redes de confiança.
+
+---
+
+## 🔒 HTTPS e a Bússola do Dispositivo
+
+Os browsers só dão acesso à bússola do telemóvel em páginas **HTTPS**. O
+MeshDeckWeb serve HTTPS numa **segunda porta**, ao lado do HTTP, para os
+dispositivos que não precisam da bússola continuarem em HTTP sem instalar nada.
+
+```bash
+python3 run_server.py --make-cert 192.168.1.120
+```
+
+Isto cria uma **autoridade de certificação (CA) local** — uma só vez — e um
+certificado do servidor para o IP indicado, os IPs da máquina e o nome dela.
+Depois de reiniciar:
+
+| Endereço | Para |
+|----------|------|
+| `http://<ip>:8080/` | Todos os dispositivos, sem avisos |
+| `https://<ip>:8443/` | Dispositivos que querem a bússola |
+
+Para não ver o aviso "esta ligação não é privada", instale a CA uma vez em cada
+dispositivo que use HTTPS. Gerar de novo o certificado do servidor (outro IP,
+validade a terminar) mantém a CA, por isso os dispositivos não precisam de a
+voltar a instalar.
+
+- **iPhone/iPad:** abra `https://<ip>:8443/ca.crt` no Safari (aceite o aviso)
+  → Definições → *Perfil descarregado* → Instalar → Definições → Geral →
+  Informações → **Definições de confiança de certificados** → active
+  *MeshDeckWeb CA*.
+- **Android:** descarregue `/ca.crt` → Definições → Segurança → Encriptação e
+  credenciais → Instalar certificado → Certificado de CA.
+- **PC:** importe `meshdeck-ca.crt` como autoridade de certificação de raiz
+  fidedigna, ou aceite o aviso do browser.
+
+Numa página HTTP, o botão da bússola mostra a ligação para o endereço HTTPS.
+
+---
+
+## 🔌 USB Serial
+
+O MeshDeckWeb comunica com um dispositivo Meshtastic por USB sem precisar do
+`meshtasticd`. Uma ponte incluída (`meshtastic_bridge.py`) lê o fluxo série,
+descarta o ruído de depuração e expõe os frames limpos num servidor TCP local.
+
+No browser: **Conectar** → **Serial** → escolha a porta (⟳ actualiza a lista)
+→ Conectar. Ou no arranque: `python3 run_server.py --serial /dev/ttyACM0`.
+
+Os chipsets USB suportados incluem ESP32/S2/S3/C3, CP210x, FTDI, CH340/CH341,
+PL2303 e nRF52840 (Adafruit, RAK4631). Se um dispositivo não aparecer,
+confirme que o cabo transmite dados e que o seu utilizador pode ler a porta
+(grupo `dialout` no Linux).
+
+Ponte isolada:
 
 ```bash
 python3 meshtastic_bridge.py --list
 python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 ```
 
-> **Créditos:** Conceito e código original por **[@KMX415](https://github.com/KMX415)**.
+> **Créditos:** conceito da ponte série de **[@KMX415](https://github.com/KMX415)**.
+
+---
+
+## 🌍 Acesso à Internet
+
+Tudo é servido pela própria máquina — interface, bibliotecas e gráficos das
+métricas — por isso o MeshDeckWeb continua a funcionar no campo sem internet.
+A única excepção é o **fundo do mapa** (mosaicos OpenStreetMap e Esri): sem
+internet o mapa continua a mostrar os nós, os traceroutes e as ligações, sobre
+um fundo vazio.
+
+---
+
+## 📁 Ficheiros
+
+As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`):
+
+| Ficheiro | Conteúdo |
+|----------|----------|
+| `server.json` | Chave de sessão, hash da password, endereço, definições HTTPS |
+| `settings.json` | Idioma e outras preferências |
+| `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
+
+A password nunca fica guardada em claro. As escolhas de cada dispositivo (som,
+vista da lista de nós) ficam no respectivo browser.
 
 ---
 
@@ -201,70 +253,44 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 
 ```
 meshdeck/
-├── main.py                  ← Ponto de entrada · MainWindow · ligação de sinais
-├── constants.py             ← Cores, estilos Qt, APP_STYLESHEET
-├── models.py                ← FirmwareFavorites, NodeTableModel, NodeFilterProxyModel
-├── worker.py                ← MeshtasticWorker — TCP/Serial/pubsub/pacotes
-├── dialogs.py               ← ConnectionDialog, ConsoleWindow, RebootWaitDialog
-├── i18n.py                  ← Sistema de internacionalização (PT/EN), tr()
-├── meshtastic_bridge.py     ← Bridge serial USB-para-TCP
-├── tabs/
-│   ├── tab_nodes.py         ← MapWidget (Leaflet, traceroutes, vizinhança)
-│   ├── tab_messages.py      ← MessagesTab (canais, DMs PKI/PSK)
-│   ├── tab_navigation.py    ← NavigationTab (bússola, tabela GPS, refresh posição)
-│   ├── tab_config.py        ← ConfigTab, ChannelsTab, MESHTASTIC_CONFIG_DEFS
-│   ├── tab_metrics.py       ← MetricsTab (orquestração das 11 secções)
-│   ├── metrics_data.py      ← MetricsDataMixin (ingestão e cálculo de dados)
-│   └── metrics_render.py    ← MetricsRenderMixin (geração HTML/JS/Chart.js)
+├── run_server.py          ← Ponto de entrada e opções da linha de comandos
+├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
+├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas
+├── web/                   ← Interface do browser (HTML, CSS, JavaScript, Leaflet/Socket.IO incluídos)
+├── i18n.py                ← Traduções PT/EN
+├── constants.py           ← Versão e cores
+├── meshtastic_bridge.py   ← Ponte série USB → TCP
+├── tests/                 ← Testes (pytest)
 └── requirements.txt
 ```
 
----
-
-## ⚙️ Instalação
+Para correr os testes:
 
 ```bash
-pip install -r requirements.txt
-```
-
-### No uConsole CM4 (Debian/Ubuntu/Raspbian)
-
-```bash
-sudo apt install python3-pyqt5 python3-pyqt5.qtwebengine python3-pip
-pip3 install meshtastic pypubsub pyserial --break-system-packages
-```
-
-**Requisitos:** Python 3.9+, display X11 ou Wayland.  
-**Modo TCP:** `meshtasticd` a correr na porta 4403.  
-**Modo Serial:** dispositivo Meshtastic via USB + `pyserial`.
-
----
-
-## 🚀 Execução
-
-```bash
-cd meshdeck/
-python3 main.py
+pip install pytest
+python3 -m pytest
 ```
 
 ---
 
-## 📡 Requisitos do Firmware Meshtastic
+## 📡 Requisitos de Firmware Meshtastic
 
 | Funcionalidade | Versão mínima |
-|---------------|--------------|
-| DM PKI (E2E) | ≥ 2.3.0 |
-| NeighborInfo via LoRa | ≥ 2.5.13 |
-| Traceroute com SNR | ≥ 2.3.2 |
-| Favoritos no firmware | ≥ 2.3.0 |
+|----------------|---------------|
+| DMs PKI (cifradas ponta a ponta) | 2.3.0 |
+| Favoritos geridos no firmware | 2.3.0 |
+| Hops por pacote, LocalStats | 2.3.0 |
+| Traceroute com SNR | 2.3.2 |
+| NeighborInfo por LoRa | 2.5.13 |
+| Retransmissor de cada pacote ("quem mais retransmite") | 2.6.0 |
 
 ---
 
 ## 🧑‍💻 Desenvolvido por
 
 **CT7BRA — Tiago Veiga**  
-Python 3 · PyQt5 · Meshtastic · Leaflet · Chart.js  
-Optimizado para ClockworkPi uConsole CM4 · 2026
+Python 3 · Flask · Socket.IO · Meshtastic · Leaflet · Chart.js  
+Optimizado para o ClockworkPi uConsole CM4 · 2026
 
 ---
 
@@ -272,19 +298,17 @@ Optimizado para ClockworkPi uConsole CM4 · 2026
 
 | Contribuidor | Contribuição |
 |--------------|-------------|
-| [@KMX415](https://github.com/KMX415) | Conceito e código original do bridge serial |
+| [@KMX415](https://github.com/KMX415) | Conceito e código original da ponte série |
 
 ---
 
 ## 🤖 Nota sobre Inteligência Artificial
 
 Este projecto foi desenvolvido com o apoio do **Claude** (Anthropic). A IA
-colaborou em múltiplas sessões contribuindo para a arquitectura, i18n, as 10
-secções de métricas, a aba de navegação (incluindo o refresh de posição GPS),
-a aba de configuração (reescrita completa do pipeline de save, correcção proto3,
-auditoria de campos), lógica de traceroutes, detecção e correcção de bugs,
-optimizações de performance para o CM4, integração do bridge serial USB,
-e tradução completa PT/EN.
+contribuiu ao longo de muitas sessões — da aplicação desktop original
+(métricas, escrita da configuração, navegação, ponte série, traduções) à versão
+web: o núcleo partilhado, o servidor, a interface do browser, o HTTPS, a
+revisão das métricas e as métricas novas.
 
 O código foi revisto, testado e validado pelo autor em hardware real
-(ClockworkPi uConsole CM4) com uma rede Meshtastic activa.
+(ClockworkPi uConsole CM4 e iPhone) com uma rede Meshtastic activa.
