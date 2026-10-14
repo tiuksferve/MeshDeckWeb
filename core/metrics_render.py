@@ -1,9 +1,9 @@
 """
-tabs/metrics_render.py — MetricsRenderMixin: geração de HTML/JS para cada
+core/metrics_render.py — MetricsRenderMixin: geração de HTML/JS para cada
 secção de métricas (Chart.js, tabelas, KPIs).
 
 Separado de tab_metrics.py para facilitar manutenção.
-Importado exclusivamente por MetricsTab (tabs/tab_metrics.py).
+Combinado com MetricsDataMixin em core/metrics.py (MeshMetrics).
 """
 import json
 from i18n import tr

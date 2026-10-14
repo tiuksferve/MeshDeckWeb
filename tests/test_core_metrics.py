@@ -29,7 +29,7 @@ def metrics():
 
 
 def test_core_metrics_imports_without_qt():
-    """Num subprocesso limpo, porque o conftest carrega o PyQt5 para a sessão."""
+    """Num subprocesso limpo: o núcleo nunca pode depender de PyQt."""
     import subprocess
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     code = (
@@ -131,15 +131,6 @@ def test_clear_resets_everything(metrics):
     assert metrics.data_for("overview")["total_pkts"] >= 1
     metrics.clear()
     assert metrics.data_for("overview")["total_pkts"] == 0
-
-
-def test_desktop_tab_shares_the_same_implementation():
-    """A aba do desktop e o servidor não podem divergir nos cálculos."""
-    pytest.importorskip("PyQt5.QtWebEngineWidgets")
-    from tabs.tab_metrics import MetricsTab
-    assert issubclass(MetricsTab, MeshMetrics)
-    assert MetricsTab._WAITING_SECTIONS is WAITING_SECTIONS
-    assert [key for _label, key in MetricsTab.get_sections()] == list(SECTION_KEYS)
 
 
 # ── correcções da revisão de métricas ────────────────────────────────────────

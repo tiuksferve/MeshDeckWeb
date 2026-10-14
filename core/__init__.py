@@ -1,6 +1,6 @@
 """
 core — núcleo do MeshDeck independente de interface.
 
-Partilhado pela aplicação desktop PyQt5 (via adaptadores finos) e pelo
-servidor web. Nenhum módulo deste pacote importa PyQt5.
+Ligação ao nó, mensagens, nós, configuração e métricas. O servidor web
+(server/) é a interface; nada aqui depende dela.
 """

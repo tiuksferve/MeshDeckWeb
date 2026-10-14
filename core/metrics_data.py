@@ -1,5 +1,5 @@
 """
-tabs/metrics_data.py — MetricsDataMixin: estruturas de dados, ingestão de
+core/metrics_data.py — MetricsDataMixin: estruturas de dados, ingestão de
 pacotes e cálculo de métricas para a aba de métricas em tempo real.
 
 CORRECÇÕES (v1.0.3):

@@ -1,20 +1,16 @@
 """
 core/metrics.py — Métricas da rede, livres de interface.
 
-MetricsDataMixin e MetricsRenderMixin já não dependiam do Qt: o primeiro só
-agrega pacotes, o segundo devolve HTML com Chart.js que o QWebEngineView
-apenas injectava. O que faltava era uma classe concreta que os juntasse sem
-widget, as duas constantes de limite do canal que viviam na MetricsTab, e um
-despacho de secções que estava escrito à mão na aba.
-
-É isso que MeshMetrics faz. A aba de métricas do desktop e o servidor web
-herdam dela, por isso as 12 secções e os seus cálculos existem uma só vez.
+MetricsDataMixin (core/metrics_data.py) agrega os pacotes; MetricsRenderMixin
+(core/metrics_render.py) devolve o HTML de cada secção, com Chart.js. A
+MeshMetrics junta os dois, define os limites do canal e despacha as 12
+secções que o servidor serve ao browser.
 """
 
 import hashlib
 
-from tabs.metrics_data import MetricsDataMixin
-from tabs.metrics_render import MetricsRenderMixin
+from core.metrics_data import MetricsDataMixin
+from core.metrics_render import MetricsRenderMixin
 
 # (chave, etiqueta por traduzir). A ordem é a que a interface apresenta.
 SECTIONS = (
@@ -61,10 +57,8 @@ class MeshMetrics(MetricsDataMixin, MetricsRenderMixin):
     CH_UTIL_OK   = 25.0   # abaixo = verde
     CH_UTIL_WARN = 50.0   # abaixo = laranja; acima = vermelho
 
-    def __init__(self, *args, **kwargs):
-        # *args/**kwargs para a MetricsTab do desktop poder herdar daqui e de
-        # QWidget ao mesmo tempo: o parent segue a cadeia de MRO até ao widget.
-        super().__init__(*args, **kwargs)
+    def __init__(self):
+        super().__init__()
         self._reset_data()
 
     # -- despacho das secções --------------------------------------------

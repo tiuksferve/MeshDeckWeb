@@ -5,9 +5,8 @@ Substitui QSettings("CT7BRA", "MeshDeck"). Guarda em JSON sob
 $XDG_CONFIG_HOME/meshdeck (por omissão ~/.config/meshdeck), o que torna o
 ficheiro legível e editável à mão — útil num servidor sem interface.
 
-A API espelha a do QSettings (value/set_value/contains/remove) para que tanto
-a aplicação desktop como o servidor possam usar a mesma classe. Os aliases
-camelCase existem só para substituição directa no código PyQt5 existente.
+A API segue a do QSettings (value/set_value/contains/remove), que a versão
+desktop original usava; os aliases camelCase vêm dessa origem.
 
 Ao contrário do QSettings, o JSON preserva os tipos, por isso value() devolve
 int, bool e list tal como foram gravados. O parâmetro type= continua a ser

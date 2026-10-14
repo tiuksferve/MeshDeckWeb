@@ -1,9 +1,6 @@
 """
 core/favorites.py — Favoritos geridos no firmware do nó local.
 
-Movido de models.py sem alterações de comportamento, para o servidor poder
-usá-lo sem arrastar o PyQt5. models.py reexporta a classe para a aplicação
-desktop continuar a importá-la de lá.
 """
 
 from typing import Dict, Optional, Set

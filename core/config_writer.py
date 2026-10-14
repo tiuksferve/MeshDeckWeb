@@ -1,8 +1,7 @@
 """
 core/config_writer.py — Leitura e escrita da configuração do nó, sem Qt.
 
-Porta para o core o que _ConfigSaveWorker e _ChannelSaveWorker faziam em
-tabs/tab_config.py, para o servidor web poder configurar o rádio:
+Escreve a configuração do rádio a pedido do servidor web:
 
   * a escrita é uma transacção (beginSettingsTransaction → writeConfig por
     secção alterada → commitSettingsTransaction), para o firmware reiniciar

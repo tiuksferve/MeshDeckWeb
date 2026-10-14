@@ -1,13 +1,12 @@
 """
 core/config_defs.py — Esquema das 21 secções de configuração do firmware.
 
-Extraído de tabs/tab_config.py sem alterações. É a fonte de verdade sobre
+É a fonte de verdade sobre
 que campos existem, de que tipo são e que limites têm, validada contra o
 config.proto e module_config.proto oficiais.
 
-No desktop este esquema construía widgets Qt. No servidor é servido como JSON
-e um renderizador genérico no browser gera os formulários das 21 secções a
-partir dele — um só esquema para as duas interfaces.
+O servidor serve-o como JSON e um renderizador genérico no browser gera os
+formulários das 21 secções a partir dele.
 
 Formato de cada campo: (etiqueta, nome_no_protobuf, tipo, opções)
   "combo"              -> opções é a lista de valores do enum
@@ -19,9 +18,6 @@ Formato de cada campo: (etiqueta, nome_no_protobuf, tipo, opções)
   "readonly_with_note" -> idem, com uma nota explicativa nas opções
   "canned_messages"    -> editor dedicado das mensagens pré-definidas
 O nome do campo pode conter pontos para campos aninhados (ex: "ipv4_config.ip").
-
-tabs/tab_config.py reexporta tudo isto para a aplicação desktop continuar a
-importar de lá.
 """
 
 import re
