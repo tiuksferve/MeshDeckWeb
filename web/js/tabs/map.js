@@ -12,7 +12,7 @@
 import { store } from '../store.js';
 import { requestTraceroute } from '../traceroute.js';
 import { t } from '../i18n.js';
-import { escapeHtml, fmtNum, fmtAgo, isMobile } from '../utils.js';
+import { escapeHtml, fmtNum, fmtAgo, isMobile, showDialog } from '../utils.js';
 
 // As camadas CartoDB (dark_all/light_all) que a app desktop usava passaram a
 // exigir uma chave de API (devolvem 200 OK com uma imagem "API KEY REQUIRED"
@@ -22,9 +22,11 @@ import { escapeHtml, fmtNum, fmtAgo, isMobile } from '../utils.js';
 // para mapas escuros sem depender de um provedor pago. Fica um tema a menos
 // do que a app desktop (o antigo "🗺 OpenStreetMap" tornou-se idêntico a
 // "☀ Claro"), por isso essa opção foi retirada da barra de temas.
+// Claro e Escuro vêm do servidor (server/tile_cache.py), que guarda cada
+// mosaico visto: sem internet, as zonas já vistas continuam a aparecer.
 const TILE_URLS = {
-  dark:      { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', filter: true },
-  light:     { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', filter: false },
+  dark:      { url: '/tiles/osm/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', filter: true },
+  light:     { url: '/tiles/osm/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', filter: false },
   // Satélite "híbrido": a imagem da Esri sozinha não tem nomes nem estradas,
   // por isso sobrepõem-se as camadas de referência (transparentes, também
   // livres e sem chave) com estradas e com localidades/fronteiras.
@@ -72,6 +74,7 @@ export function mount() {
     const tr = traceroutes.find((x) => x.id === Number(btn.dataset.trFocus));
     if (tr) focusTraceroute(tr.origin, tr.dest);
   });
+  document.getElementById('tile-cache-clear').addEventListener('click', clearTileCache);
   document.getElementById('tr-clear').addEventListener('click', () => {
     traceroutes.length = 0;
     renderTraceList();
@@ -92,6 +95,7 @@ export function mount() {
 export function onShow() {
   if (!initialized) initMap();
   else map.invalidateSize();
+  refreshTileCacheInfo();
   // Uma selecção feita com o mapa escondido não pôde centrar (o Leaflet
   // mede um contentor de tamanho zero); aplica-se agora que é visível.
   if (pendingCenterId) {
@@ -156,6 +160,8 @@ function setTileLayer(name) {
   if (tileLayer) map.removeLayer(tileLayer);
   overlayLayers.forEach((layer) => map.removeLayer(layer));
   tileLayer = L.tileLayer(def.url, { attribution: def.attribution, maxZoom: 19 }).addTo(map);
+  // Depois de carregar os mosaicos visíveis, a linha "Mapa offline" mostra o novo total.
+  tileLayer.on('load', refreshTileCacheInfo);
   overlayLayers = (def.overlays || []).map((url) => L.tileLayer(url, { maxZoom: 19 }).addTo(map));
   map.getContainer().classList.toggle('theme-dark-filter', !!def.filter);
 }
@@ -316,6 +322,36 @@ function drawNeighborLines() {
 }
 
 /* ── traceroutes ──────────────────────────────────────────────────────── */
+
+/* Linha "Mapa offline: 23 MB de 200 MB" no painel, com o botão de limpar. */
+async function refreshTileCacheInfo() {
+  const info = document.getElementById('tile-cache-info');
+  try {
+    const res = await fetch('/api/tiles', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    renderTileCacheInfo(await res.json());
+  } catch {
+    info.textContent = '';
+  }
+}
+
+function renderTileCacheInfo(s) {
+  const mb = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0);
+  const info = document.getElementById('tile-cache-info');
+  info.textContent = s.limit_bytes
+    ? t('{used} MB de {limit} MB · {n} mosaicos', { used: mb(s.bytes), limit: mb(s.limit_bytes), n: s.tiles })
+    : t('desactivado');
+  document.getElementById('tile-cache-offline').hidden = !s.offline;
+}
+
+async function clearTileCache() {
+  const ok = await showDialog(escapeHtml(t('Limpar mapa offline')),
+    `<p class="modal-text">${escapeHtml(t('Apagar os mosaicos guardados? Sem internet, o mapa fica sem fundo até voltar a ver essas zonas com ligação.'))}</p>`,
+    [{ label: t('Cancelar'), value: false }, { label: t('Limpar'), value: true, primary: true }]);
+  if (!ok) return;
+  const res = await fetch('/api/tiles/clear', { method: 'POST', credentials: 'same-origin' });
+  if (res.ok) renderTileCacheInfo(await res.json());
+}
 
 function closeSide() {
   document.querySelector('#panel-map .map-layout').classList.remove('side-open');

@@ -26,6 +26,7 @@ from core.serialize import safe_utf8_text
 from i18n import get_language, tr
 from server import events as ev
 from server import tls
+from server.tile_cache import TileCache
 from server.auth import ServerConfig, is_authenticated, login, login_required, logout
 from server.bridge_manager import list_serial_ports
 from server.session import ConfigBusy, ConfigUnavailable, MeshSession
@@ -109,6 +110,36 @@ def create_app(config: ServerConfig = None) -> tuple:
             abort(404)
         return send_file(path, mimetype="application/x-x509-ca-cert",
                          as_attachment=True, download_name="meshdeck-ca.crt")
+
+    # ------------------------------------------------------------------
+    # Mosaicos do mapa, com cache em disco (mapa offline)
+    # ------------------------------------------------------------------
+    tiles = TileCache(limit_mb=config.tile_cache_mb)
+    app.tiles = tiles
+
+    @app.get("/tiles/osm/<int:z>/<int:x>/<int:y>.png")
+    @login_required
+    def map_tile(z, x, y):
+        data = tiles.get(z, x, y)
+        if data is None:
+            # Sem internet e nunca visto: o browser volta a pedir mais tarde.
+            response = app.response_class(status=404)
+            response.headers["Cache-Control"] = "no-store"
+            return response
+        response = app.response_class(data, mimetype="image/png")
+        response.headers["Cache-Control"] = "private, max-age=86400"
+        return response
+
+    @app.get("/api/tiles")
+    @login_required
+    def api_tiles_stats():
+        return jsonify(tiles.stats())
+
+    @app.post("/api/tiles/clear")
+    @login_required
+    def api_tiles_clear():
+        tiles.clear()
+        return jsonify(tiles.stats())
 
     @app.route("/<path:filename>")
     def static_files(filename):

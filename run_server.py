@@ -58,6 +58,9 @@ def parse_args():
     p.add_argument("--https-port", type=int, metavar="PORTA",
                    help="porta HTTPS, servida ao lado do HTTP quando há certificado "
                         "(default: a guardada, ou 8443)")
+    p.add_argument("--tile-cache-mb", type=int, metavar="MB",
+                   help="limite da cache de mosaicos do mapa, para o mapa funcionar "
+                        "sem internet (default: o guardado, ou 200; 0 = não guardar)")
     p.add_argument("--no-tls", action="store_true", help="desactivar HTTPS (ficar só HTTP) e sair")
     p.add_argument("--debug", action="store_true", help="logging em DEBUG")
     return p.parse_args()
@@ -146,6 +149,8 @@ def main():
 
     if args.https_port:
         config.set_https_port(args.https_port)
+    if args.tile_cache_mb is not None:
+        config.set_tile_cache_mb(args.tile_cache_mb)
     if args.make_cert is not None:
         return make_certificate(config, args.make_cert)
     if args.no_tls:

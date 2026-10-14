@@ -30,7 +30,8 @@ logger = logging.getLogger("MeshDeck.auth")
 SESSION_FLAG = "meshdeck_auth"
 DEFAULT_BIND_HOST = "127.0.0.1"
 DEFAULT_BIND_PORT = 8080
-DEFAULT_HTTPS_PORT = 8443   # HTTPS ao lado do HTTP, para quem precisa (bússola)
+DEFAULT_HTTPS_PORT = 8443
+DEFAULT_TILE_CACHE_MB = 200  # cache dos mosaicos do mapa (mapa offline)   # HTTPS ao lado do HTTP, para quem precisa (bússola)
 PASSWORD_LENGTH_BYTES = 9   # ~12 caracteres em base64url
 MAX_RECENT_TARGETS = 10     # nós TCP não favoritos guardados no histórico
 
@@ -107,6 +108,14 @@ class ServerConfig:
 
     def set_https_port(self, port: int):
         self._s.set_value("https_port", int(port))
+
+    @property
+    def tile_cache_mb(self) -> int:
+        """Limite da cache de mosaicos do mapa; 0 = não guardar nada."""
+        return int(self._s.value("tile_cache_mb", DEFAULT_TILE_CACHE_MB, type=int))
+
+    def set_tile_cache_mb(self, megabytes: int):
+        self._s.set_value("tile_cache_mb", max(int(megabytes), 0))
 
     def set_tls(self, cert: str, key: str):
         self._s.update({"tls_cert": os.path.abspath(cert), "tls_key": os.path.abspath(key)})

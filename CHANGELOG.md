@@ -51,10 +51,17 @@ desktop application is removed.
   - New section **🌡 Environment & Power**: environment, air quality and INA
     power sensors, with a temperature chart.
 
+- **🗺 Offline map:** the server caches every OpenStreetMap tile that is
+  viewed (Light and Dark themes) and serves it without internet, to every
+  device. Default limit 200 MB (`--tile-cache-mb`), oldest tiles removed
+  first, refreshed after 30 days when online; the map panel shows the space
+  used, a "no internet" note and a clear button. Follows the OSM tile policy
+  (identified User-Agent, no bulk downloads). Satellite stays online-only.
+
 - **🧰 Guided installer** (`install.py`, Linux/macOS/Windows): creates the
   virtual environment, installs the dependencies and configures the first
   run — language, network access and port, password, node connection (TCP or
-  a listed USB port), optional HTTPS — then writes a `start.sh`/`start.bat`
+  a listed USB port), optional HTTPS, offline map space — then writes a `start.sh`/`start.bat`
   shortcut.
 
 - **🧪 Test suite** under `tests/` (pytest).
@@ -68,7 +75,7 @@ desktop application is removed.
   (MQTT packets and the node's own echoes are excluded); Range & Links,
   RF Quality and Environment update live.
 - **📴 Works offline:** the metrics load Chart.js from the copy bundled with
-  the server instead of a CDN; only the map background needs internet.
+  the server instead of a CDN.
 - **📦 Requirements:** Flask, Flask-SocketIO, simple-websocket and
   cryptography replace PyQt5 and PyQtWebEngine.
 

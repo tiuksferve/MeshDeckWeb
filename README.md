@@ -117,7 +117,8 @@ The installer guides you step by step:
 4. Asks **how to reach the node**: `meshtasticd` on the same machine, another
    address, a USB port (listed for you) or later in the browser
 5. Optionally enables **HTTPS** for the phone compass
-6. Creates a **start shortcut** — `start.sh` (Linux/macOS) or `start.bat`
+6. Sets the space for the **offline map** (200 MB by default)
+7. Creates a **start shortcut** — `start.sh` (Linux/macOS) or `start.bat`
    (Windows) — and shows the addresses to open
 
 From then on, start the server with:
@@ -185,6 +186,7 @@ are remembered for the next runs.
 | `--https-port` | HTTPS port (default `8443`) |
 | `--tls-cert`, `--tls-key` | Use your own certificate instead |
 | `--no-tls` | Turn HTTPS off (HTTP only) and exit |
+| `--tile-cache-mb` | Space for the offline map (default `200`, `0` = keep nothing) |
 | `--debug` | Detailed logging (e.g. each LocalStats received) |
 
 > ⚠️ Anyone who logs in can reconfigure the node, channels and PSKs included.
@@ -254,10 +256,18 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 ## 🌍 Internet Access
 
 Everything is served by the machine itself — interface, libraries and metric
-charts — so MeshDeckWeb keeps working in the field without internet. The only
-exception is the **map background** (OpenStreetMap and Esri tiles): without
-internet the map still shows the nodes, traceroutes and links, on a blank
-background.
+charts — so MeshDeckWeb keeps working in the field without internet.
+
+**Offline map:** the server keeps every map tile anyone views (☀ Light and
+🌑 Dark themes), so without internet the map still shows the areas already
+seen — on every device. Typical use takes 20–60 MB; the limit is 200 MB by
+default (`--tile-cache-mb`, also asked by the installer) and the oldest tiles
+go first. The map panel shows the space used, a "no internet" note and a
+button to clear it. Areas never viewed show the nodes on a blank background.
+
+Following the OpenStreetMap tile policy, only tiles that are actually viewed
+are downloaded — never whole areas in advance. The 🛰 Satellite theme (Esri)
+is not stored and needs internet.
 
 ---
 
@@ -271,6 +281,9 @@ Settings live in `~/.config/meshdeck/` (or `$XDG_CONFIG_HOME/meshdeck/`):
 | `settings.json` | Language and other preferences |
 | `tls/` | Local CA and server certificate (the private keys are readable only by you) |
 
+The offline map tiles live in `~/.cache/meshdeck/tiles/` (or
+`$XDG_CACHE_HOME/meshdeck/tiles/`) and can be deleted at any time.
+
 The password is never stored in clear text. Per-device choices (sound, node
 list view) stay in each browser.
 
@@ -280,7 +293,7 @@ list view) stay in each browser.
 
 ```
 meshdeck/
-├── install.py             ← Guided setup (venv, password, node, HTTPS, start shortcut)
+├── install.py             ← Guided setup (venv, password, node, HTTPS, offline map, start shortcut)
 ├── run_server.py          ← Entry point and command-line options
 ├── server/                ← Flask + Socket.IO: HTTP API, login, HTTPS, serial bridge
 ├── core/                  ← Node connection, nodes, messages, configuration, metrics

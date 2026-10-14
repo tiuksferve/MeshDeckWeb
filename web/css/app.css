@@ -229,6 +229,8 @@ tbody tr:hover td { background: var(--input); }
 #map-canvas { border: 1px solid var(--border); border-radius: 8px; background: #000; isolation: isolate; }
 .map-side { overflow-y: auto; }
 .map-side-toggle, .map-side-head { display: none; }
+.tile-cache { font-size: 11px; margin: -4px 0 14px; }
+.tile-offline { color: var(--orange); }
 /* Lista de traceroutes: origem → destino, hora e botão para enquadrar a rota. */
 #tr-list li { align-items: center; }
 #tr-list .tr-item { display: flex; gap: 6px; align-items: center; cursor: pointer; flex: 1; min-width: 0; }

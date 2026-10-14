@@ -117,7 +117,8 @@ O instalador guia-o passo a passo:
 4. Pergunta **como chegar ao nó**: `meshtasticd` na mesma máquina, outro
    endereço, uma porta USB (mostra-lhe a lista) ou mais tarde no browser
 5. Activa opcionalmente o **HTTPS** para a bússola do telemóvel
-6. Cria um **atalho de arranque** — `start.sh` (Linux/macOS) ou `start.bat`
+6. Define o espaço para o **mapa offline** (200 MB por omissão)
+7. Cria um **atalho de arranque** — `start.sh` (Linux/macOS) ou `start.bat`
    (Windows) — e mostra os endereços a abrir
 
 A partir daí, arranque o servidor com:
@@ -185,6 +186,7 @@ escolhidos ficam guardados para as execuções seguintes.
 | `--https-port` | Porta HTTPS (por omissão `8443`) |
 | `--tls-cert`, `--tls-key` | Usar um certificado próprio |
 | `--no-tls` | Desligar o HTTPS (só HTTP) e sair |
+| `--tile-cache-mb` | Espaço para o mapa offline (por omissão `200`, `0` = não guardar) |
 | `--debug` | Registo detalhado (por exemplo, cada LocalStats recebido) |
 
 > ⚠️ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Abra o
@@ -258,9 +260,18 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 
 Tudo é servido pela própria máquina — interface, bibliotecas e gráficos das
 métricas — por isso o MeshDeckWeb continua a funcionar no campo sem internet.
-A única excepção é o **fundo do mapa** (mosaicos OpenStreetMap e Esri): sem
-internet o mapa continua a mostrar os nós, os traceroutes e as ligações, sobre
-um fundo vazio.
+
+**Mapa offline:** o servidor guarda cada mosaico do mapa que alguém vê (temas
+☀ Claro e 🌑 Escuro), por isso sem internet o mapa continua a mostrar as zonas
+já vistas — em todos os dispositivos. O uso típico ocupa 20–60 MB; o limite é
+de 200 MB por omissão (`--tile-cache-mb`, também perguntado pelo instalador) e
+os mosaicos mais antigos saem primeiro. O painel do mapa mostra o espaço usado,
+um aviso "sem internet" e um botão para limpar. As zonas nunca vistas mostram
+os nós sobre um fundo vazio.
+
+Seguindo as regras do OpenStreetMap, só se descarregam os mosaicos que são de
+facto vistos — nunca zonas inteiras de antemão. O tema 🛰 Satélite (Esri) não é
+guardado e precisa de internet.
 
 ---
 
@@ -274,6 +285,9 @@ As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`
 | `settings.json` | Idioma e outras preferências |
 | `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
 
+Os mosaicos do mapa offline ficam em `~/.cache/meshdeck/tiles/` (ou
+`$XDG_CACHE_HOME/meshdeck/tiles/`) e podem ser apagados a qualquer momento.
+
 A password nunca fica guardada em claro. As escolhas de cada dispositivo (som,
 vista da lista de nós) ficam no respectivo browser.
 
@@ -283,7 +297,7 @@ vista da lista de nós) ficam no respectivo browser.
 
 ```
 meshdeck/
-├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, atalho)
+├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho)
 ├── run_server.py          ← Ponto de entrada e opções da linha de comandos
 ├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
 ├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas

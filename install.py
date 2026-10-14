@@ -9,7 +9,8 @@ Funciona em duas etapas. A primeira corre com o Python do sistema e só usa a
 biblioteca padrão: verifica a versão, cria o ambiente virtual (.venv) e
 instala as dependências. A segunda corre já dentro do .venv e configura a
 primeira execução com o próprio código do servidor (password, acesso,
-ligação ao nó, HTTPS): o resultado é o mesmo que as opções do run_server.py.
+ligação ao nó, HTTPS, mapa offline): o resultado é o mesmo que as opções do
+run_server.py.
 
 No fim fica um atalho de arranque (start.sh ou start.bat). Pode correr o
 instalador outra vez para mudar a configuração; o ambiente já instalado é
@@ -46,7 +47,7 @@ TEXTS = {
     "yes_letters": (("s", "sim", "y", "yes"), ("y", "yes", "s", "sim")),
     "invalid": ("Resposta inválida, tente de novo.", "Invalid answer, try again."),
 
-    "sec_access": ("1/4 · Acesso", "1/4 · Access"),
+    "sec_access": ("1/5 · Acesso", "1/5 · Access"),
     "ask_network": ("Abrir o servidor à rede local, para entrar a partir do telemóvel?",
                     "Open the server to your local network, to use it from your phone?"),
     "network_warn": ("⚠ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Use só em redes de confiança.",
@@ -57,7 +58,7 @@ TEXTS = {
                   "⚠ Port {port} is in use right now (maybe MeshDeckWeb is already running).\n"
                   "  Stop the other program before starting, or run the installer again and pick another port."),
 
-    "sec_password": ("2/4 · Password de acesso", "2/4 · Access password"),
+    "sec_password": ("2/5 · Password de acesso", "2/5 · Access password"),
     "ask_own_password": ("Quer escolher a password? (se não, fica uma gerada ao acaso)",
                          "Do you want to choose the password? (otherwise a random one is kept)"),
     "ask_keep_password": ("Já existe uma password. Mantê-la?", "A password already exists. Keep it?"),
@@ -68,7 +69,7 @@ TEXTS = {
                      "Generated password — SAVE IT, it will not be shown again:"),
     "pw_set": ("✅ Password definida.", "✅ Password set."),
 
-    "sec_node": ("3/4 · Ligação ao nó Meshtastic", "3/4 · Meshtastic node connection"),
+    "sec_node": ("3/5 · Ligação ao nó Meshtastic", "3/5 · Meshtastic node connection"),
     "node_menu": ("Como liga ao nó?\n"
                   "  1) meshtasticd nesta máquina (localhost:4403)\n"
                   "  2) Nó noutro endereço da rede (TCP)\n"
@@ -91,7 +92,7 @@ TEXTS = {
     "ask_autoconnect": ("Ligar ao nó automaticamente ao arrancar o servidor?",
                         "Connect to the node automatically when the server starts?"),
 
-    "sec_https": ("4/4 · HTTPS (bússola do telemóvel)", "4/4 · HTTPS (phone compass)"),
+    "sec_https": ("4/5 · HTTPS (bússola do telemóvel)", "4/5 · HTTPS (phone compass)"),
     "https_info": ("Os browsers só dão acesso à bússola do telemóvel em HTTPS. O HTTPS fica numa segunda porta;\n"
                    "o HTTP continua igual para os outros dispositivos.",
                    "Browsers only give access to the phone compass over HTTPS. HTTPS runs on a second port;\n"
@@ -101,6 +102,12 @@ TEXTS = {
     "https_ok": ("✅ Certificado criado para: {names}", "✅ Certificate created for: {names}"),
     "https_off": ("HTTPS desactivado.", "HTTPS disabled."),
 
+    "sec_map": ("5/5 · Mapa offline", "5/5 · Offline map"),
+    "map_info": ("O servidor guarda os mosaicos do mapa que forem vistos, para o mapa funcionar sem internet\n"
+                 "nessas zonas. Uso típico: 20–60 MB. Use 0 para não guardar nada.",
+                 "The server keeps the map tiles you view, so the map works without internet in those areas.\n"
+                 "Typical use: 20–60 MB. Use 0 to keep nothing."),
+    "ask_map_mb": ("Espaço máximo em MB", "Maximum space in MB"),
     "launcher": ("✅ Atalho de arranque criado: {path}", "✅ Start shortcut created: {path}"),
     "done": ("Pronto! Para arrancar o servidor:", "Done! To start the server:"),
     "open_at": ("Depois abra no browser:", "Then open in the browser:"),
@@ -345,6 +352,9 @@ def stage_configure(chosen_lang):
     configure_password(config)
     flags = configure_node(config)
     configure_https(config, network)
+    section("sec_map")
+    print(t("map_info"))
+    config.set_tile_cache_mb(ask_int(t("ask_map_mb"), config.tile_cache_mb, 0, 100000))
     write_launcher(flags)
 
     hosts = (tls.local_addresses() or ["<ip>"]) if network else ["127.0.0.1"]
