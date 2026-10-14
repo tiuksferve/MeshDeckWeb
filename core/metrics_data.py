@@ -1030,6 +1030,8 @@ class MetricsDataMixin:
             "sent_dm": self._msgs_sent - self._msgs_sent_channel,
             "sent_channel": self._msgs_sent_channel,
             "lbl_channel": tr("Canal"),
+            "lbl_nak_delivery": tr("NAK entrega"),
+            "lbl_fw_errors": tr("Erros FW"),
             "ever_seen": self._pkt_ids_ever > 0,
         }
 

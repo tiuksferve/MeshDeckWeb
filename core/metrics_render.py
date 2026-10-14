@@ -1294,7 +1294,7 @@ window._metricsUpdateData = function(d) {{
   <div class="card">
     <h3>{tr("NAK da Rede (ROUTING_APP)")}</h3>
     <div id="rel-net-nak" class="kpi {nak_net_color}">{net_nak_rate if net_nak_rate is not None else '—'}{'%' if net_nak_rate is not None else ''}</div>
-    <div id="rel-net-sub" class="kpi-sub">ACK: {net_acks} · NAK entrega: {net_naks} · Erros FW: {fw_errs}<br>{tr("NAK = requestId + errorReason · Erros FW = sem requestId")}</div>
+    <div id="rel-net-sub" class="kpi-sub">ACK: {net_acks} · {tr("NAK entrega")}: {net_naks} · {tr("Erros FW")}: {fw_errs}<br>{tr("NAK = requestId + errorReason · Erros FW = sem requestId")}</div>
   </div>
   <div class="card">
     <h3>{tr("Duplicados na rede")}</h3>
@@ -1390,7 +1390,7 @@ window._metricsUpdateData = function(d) {{
   set('rel-col-label', d.lbl_col + (d.ch_util_avg !== null ? ' \u00b7 Ch.Util: ' + d.ch_util_avg + '%' : ''));
   set('rel-net-nak',   d.net_nak_rate !== null ? d.net_nak_rate + '%' : '\u2014');
   setClass('rel-net-nak', d.net_nak_rate === null ? '' : d.net_nak_rate < 5 ? 'green' : d.net_nak_rate < 20 ? 'orange' : 'red');
-  set('rel-net-sub',   'ACK: ' + d.net_acks + ' \u00b7 NAK entrega: ' + d.net_naks + ' \u00b7 Erros FW: ' + (d.fw_errs||0));
+  set('rel-net-sub',   'ACK: ' + d.net_acks + ' \u00b7 ' + d.lbl_nak_delivery + ': ' + d.net_naks + ' \u00b7 ' + d.lbl_fw_errors + ': ' + (d.fw_errs||0));
   set('rel-pkt',       d.total_pkt);
   set('rel-ls-dupe',   d.ls_dupe_pct !== null && d.ls_dupe_pct !== undefined ? d.ls_dupe_pct + '%' : '\u2014');
   setClass('rel-ls-dupe', d.ls_dupe_pct === null || d.ls_dupe_pct === undefined ? '' : d.ls_dupe_pct < {self.DUPE_WARN} ? 'green' : d.ls_dupe_pct < {self.DUPE_CRIT} ? 'orange' : 'red');

@@ -178,7 +178,7 @@ def test_i18n_endpoint_serves_both_languages(server):
     en = server["client"].get("/api/i18n?lang=en").get_json()
     assert pt["language"] == "pt" and en["language"] == "en"
     assert len(pt["strings"]) == len(en["strings"]) > 500
-    assert pt["strings"]["err_not_connected"] != en["strings"]["err_not_connected"]
+    assert pt["strings"]["Cancelar resposta"] != en["strings"]["Cancelar resposta"]
 
 
 def test_metrics_html_endpoint(server):
