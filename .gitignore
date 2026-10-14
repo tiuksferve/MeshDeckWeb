@@ -19,8 +19,12 @@ env/
 scratch/
 
 # User data
-~/.meshtastic_monitor_favorites.json
-*.json
+# Nota: não usar "*.json" aqui. O frontend web traz ficheiros JSON versionados
+# (i18n exportado, assets vendorizados) e o padrão abrangente excluía-os em
+# silêncio. Os favoritos passaram a viver no firmware do nó, por isso o
+# ficheiro local que motivava esta regra já não existe.
+meshdeck_settings.json
+server_secret.json
 
 # macOS
 .DS_Store

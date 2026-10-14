@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161b22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MeshDeckWeb</title>
+<link rel="icon" type="image/svg+xml" href="/img/meshtastic.svg">
+<link rel="apple-touch-icon" href="/img/meshtastic.svg">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<!-- Ecrã de autenticação. O servidor expõe escrita completa da configuração
+     do nó, por isso nada é servido antes do login. -->
+<div id="login" class="overlay" hidden>
+  <form id="login-form" class="card">
+    <h1 class="brand-title"><img src="/img/meshtastic.svg" alt="" class="brand-logo"> MeshDeckWeb</h1>
+    <p class="muted" data-i18n="Terminal Meshtastic. Introduza a password do servidor.">Terminal Meshtastic. Introduza a password do servidor.</p>
+    <input type="password" id="password" placeholder="Password" data-i18n-placeholder="Password" autocomplete="current-password" required>
+    <label class="check"><input type="checkbox" id="remember" checked> <span data-i18n="Manter sessão">Manter sessão</span></label>
+    <button type="submit" data-i18n="Entrar">Entrar</button>
+    <p id="login-error" class="error" hidden></p>
+  </form>
+</div>
+
+<!-- Modal de ligação ao nó: TCP ou USB serial via ponte. -->
+<div id="connect-modal" class="overlay" hidden>
+  <form id="connect-form" class="card">
+    <h1 data-i18n="🔌 Ligação">🔌 Ligação</h1>
+    <div class="row">
+      <label><span data-i18n="Modo">Modo</span>
+        <select id="c-mode">
+          <option value="tcp">TCP (meshtasticd)</option>
+          <option value="serial" data-i18n="USB serial (via ponte)">USB serial (via ponte)</option>
+        </select>
+      </label>
+    </div>
+    <div id="c-saved" class="saved-targets" hidden>
+      <span class="muted" data-i18n="Nós guardados">Nós guardados</span>
+      <ul id="c-targets" class="plain-list target-list"></ul>
+    </div>
+    <div class="row" id="c-tcp-fields">
+      <label>Host <input id="c-host" value="localhost"></label>
+      <label><span data-i18n="Porta">Porta</span> <input id="c-port" type="number" value="4403"></label>
+    </div>
+    <div class="row" id="c-serial-fields" hidden>
+      <label><span data-i18n="Dispositivo">Dispositivo</span>
+        <select id="c-serial"></select>
+      </label>
+      <button type="button" id="c-serial-refresh" class="ghost" title="Actualizar lista de portas"
+              data-i18n-title="Actualizar lista de portas">⟳</button>
+    </div>
+    <div class="row">
+      <button type="submit" data-i18n="Ligar">Ligar</button>
+      <button type="button" id="c-cancel" class="ghost" data-i18n="Cancelar">Cancelar</button>
+    </div>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <span class="brand"><img src="/img/meshtastic.svg" alt="" class="brand-logo"> MeshDeckWeb</span>
+    <span id="conn-state" class="pill connect" role="button" tabindex="0">Conectar</span>
+    <span id="node-label" class="muted"></span>
+    <span class="spacer"></span>
+    <span id="packet-stats" class="muted mono"></span>
+    <input id="search" type="search" placeholder="🔎 procurar nó…" data-i18n-placeholder="🔎 procurar nó…" class="search">
+    <!-- Idioma, consola e sair: usados raramente, ficam num só menu. -->
+    <div class="menu-wrap">
+      <button type="button" id="menu-btn" class="menu-btn" aria-haspopup="menu" aria-expanded="false"
+              title="Menu" data-i18n-title="Menu">☰</button>
+      <div id="menu" class="menu" role="menu" hidden>
+        <div class="menu-label" data-i18n="Idioma">Idioma</div>
+        <div class="seg" id="lang-seg" role="group">
+          <button type="button" data-lang="pt">PT</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
+        <div class="menu-label" data-i18n="Som de mensagens">Som de mensagens</div>
+        <div class="seg" id="sound-seg" role="group">
+          <button type="button" data-sound="on" data-i18n="🔔 Ligado">🔔 Ligado</button>
+          <button type="button" data-sound="off" data-i18n="🔕 Desligado">🔕 Desligado</button>
+        </div>
+        <button type="button" id="btn-console" class="menu-item" role="menuitem" data-i18n="🖥 Consola do servidor">🖥 Consola do servidor</button>
+        <hr>
+        <button type="button" id="logout" class="menu-item danger" role="menuitem">⏻ <span data-i18n="Sair">Sair</span></button>
+      </div>
+    </div>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="nodes" class="tab active"><span data-i18n="📋 Nós">📋 Nós</span></button>
+    <button data-tab="map" class="tab"><span data-i18n="🗺 Mapa">🗺 Mapa</span></button>
+    <button data-tab="messages" class="tab"><span data-i18n="💬 Mensagens">💬 Mensagens</span><span id="badge-messages" class="badge" hidden></span></button>
+    <button data-tab="navigation" class="tab"><span data-i18n="🧭 Navegação">🧭 Navegação</span></button>
+    <button data-tab="metrics" class="tab"><span data-i18n="📊 Métricas">📊 Métricas</span></button>
+    <button data-tab="config" class="tab"><span data-i18n="⚙️ Configuração">⚙️ Configuração</span></button>
+  </nav>
+
+  <p id="reconnect-bar" class="banner warn" hidden></p>
+
+  <main>
+    <!-- ── Nós ─────────────────────────────────────────────────────────── -->
+    <section id="panel-nodes" class="panel-tab active">
+      <div class="stats">
+        <div><b id="n-total">0</b><span data-i18n="nós">nós</span></div>
+        <div><b id="n-contacted">0</b><span data-i18n="contactados">contactados</span></div>
+        <div><b id="n-online">0</b><span data-i18n="activos 2h">activos 2h</span></div>
+        <div><b id="n-gps">0</b><span data-i18n="com GPS">com GPS</span></div>
+      </div>
+      <div class="nodes-toolbar">
+        <p class="muted hint" data-i18n="⭐ favorito · 💬 enviar DM · 📍 centrar no mapa · 📡 traceroute · ℹ️ último pacote">⭐ favorito · 💬 enviar DM · 📍 centrar no mapa · 📡 traceroute · ℹ️ último pacote</p>
+        <!-- Só no desktop: no telemóvel a lista é sempre em cartões. -->
+        <div class="seg view-seg" id="nodes-view" role="group">
+          <button type="button" data-view="cards" data-i18n="▦ Cartões">▦ Cartões</button>
+          <button type="button" data-view="table" data-i18n="☰ Tabela">☰ Tabela</button>
+        </div>
+      </div>
+      <!-- Desktop: tabela. Telemóvel: cartões (ver nodes.js). -->
+      <div class="table-wrap nodes-table-wrap" hidden>
+        <table id="nodes-table">
+          <thead><tr>
+            <th></th><th data-i18n="Nó">Nó</th><th>ID</th>
+            <th data-i18n="Último contacto">Último contacto</th><th class="num">SNR</th><th class="num">Hops</th>
+            <th class="num" data-i18n="Bat.">Bat.</th><th data-i18n="Modelo">Modelo</th>
+            <th data-i18n="Posição">Posição</th><th class="num">Alt</th><th data-i18n="Último pacote">Último pacote</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="nodes-cards" class="node-cards"></div>
+    </section>
+
+    <!-- ── Mapa ────────────────────────────────────────────────────────── -->
+    <section id="panel-map" class="panel-tab">
+      <div class="map-layout">
+        <div id="map-canvas"></div>
+        <!-- Telemóvel: o painel é uma folha sobre o mapa, aberta por este botão. -->
+        <button type="button" id="map-side-toggle" class="map-side-toggle"
+                title="Traceroutes e tema" data-i18n-title="Traceroutes e tema">📡 <span id="tr-count" class="tr-count" hidden></span></button>
+        <aside class="map-side" id="map-side">
+          <div class="map-side-head">
+            <span class="map-side-grip"></span>
+            <button type="button" id="map-side-close" class="ghost small map-side-close"
+                    title="Fechar" data-i18n-title="Fechar">✕</button>
+          </div>
+          <h2 data-i18n="Tema">Tema</h2>
+          <div class="row" id="map-themes">
+            <button data-theme="dark" class="small theme-btn" data-i18n="🌑 Escuro">🌑 Escuro</button>
+            <button data-theme="light" class="small theme-btn active" data-i18n="☀ Claro">☀ Claro</button>
+            <button data-theme="satellite" class="small theme-btn" data-i18n="🛰 Satélite">🛰 Satélite</button>
+          </div>
+          <h2>Traceroutes <button id="tr-clear" class="ghost small" data-i18n="limpar">limpar</button></h2>
+          <ul id="tr-list" class="plain-list"></ul>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ── Mensagens ───────────────────────────────────────────────────── -->
+    <section id="panel-messages" class="panel-tab">
+      <div class="messages-layout">
+        <aside class="conv-list">
+          <h2 data-i18n="Canais">Canais</h2>
+          <ul id="channel-list" class="plain-list"></ul>
+          <h2 data-i18n="Mensagens directas">Mensagens directas</h2>
+          <ul id="dm-list" class="plain-list"></ul>
+        </aside>
+        <div class="conv-main">
+          <div class="conv-header">
+            <button type="button" id="conv-back" class="ghost small conv-back" title="Voltar às conversas" data-i18n-title="Voltar às conversas">←</button>
+            <span id="conv-header" class="muted">Selecciona uma conversa</span>
+          </div>
+          <div id="conv-view" class="conv-view"></div>
+          <div id="reply-banner" class="reply-banner" hidden>
+            <span id="reply-banner-text"></span>
+            <button type="button" id="reply-cancel" class="ghost small" title="Cancelar resposta" data-i18n-title="Cancelar resposta">✕</button>
+          </div>
+          <form id="composer" class="row composer">
+            <input id="composer-text" placeholder="Escrever mensagem…" data-i18n-placeholder="Escrever mensagem…" autocomplete="off" disabled>
+            <button type="submit" disabled data-i18n="Enviar">Enviar</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Navegação ───────────────────────────────────────────────────── -->
+    <section id="panel-navigation" class="panel-tab">
+      <div class="nav-layout">
+        <div class="panel">
+          <h2 data-i18n="Bússola">Bússola</h2>
+          <svg id="compass" viewBox="0 0 200 200" class="compass"></svg>
+          <p id="compass-info" class="muted center">Selecciona um nó com GPS na lista.</p>
+          <!-- Só em dispositivos com sensor de orientação (telemóvel/tablet). -->
+          <div class="compass-sensor" id="compass-sensor" hidden>
+            <button type="button" id="btn-device-compass" class="small" data-i18n="🧭 Usar bússola do dispositivo">🧭 Usar bússola do dispositivo</button>
+            <p id="compass-sensor-note" class="muted center compass-note" hidden></p>
+          </div>
+        </div>
+        <div class="panel">
+          <h2><span data-i18n="Nó local">Nó local</span> <button id="btn-refresh-pos" class="ghost small" data-i18n="🔄 actualizar posição">🔄 actualizar posição</button></h2>
+          <dl id="local-card" class="field-list"></dl>
+        </div>
+        <div class="panel full">
+          <h2><span data-i18n="Nós com GPS, por distância">Nós com GPS, por distância</span> <span id="gps-count" class="count-badge"></span></h2>
+          <p id="gps-note" class="muted" hidden></p>
+          <ul id="gps-list" class="gps-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Métricas ────────────────────────────────────────────────────── -->
+    <section id="panel-metrics" class="panel-tab">
+      <div class="metrics-layout">
+        <aside>
+          <ul id="metrics-list" class="plain-list"></ul>
+          <button id="metrics-clear" class="ghost small" data-i18n="🗑 limpar métricas">🗑 limpar métricas</button>
+        </aside>
+        <iframe id="metrics-frame" class="metrics-frame"></iframe>
+      </div>
+    </section>
+
+    <!-- ── Configuração ────────────────────────────────────────────────── -->
+    <section id="panel-config" class="panel-tab">
+      <p id="config-banner" class="banner info" hidden></p>
+      <div class="config-layout">
+        <aside>
+          <ul id="config-list" class="plain-list"></ul>
+        </aside>
+        <div id="config-body" class="config-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Gaveta de consola, escondida por omissão. -->
+  <div id="console-drawer" class="drawer" hidden>
+    <div class="drawer-head">
+      <span data-i18n="🖥 Consola do servidor">🖥 Consola do servidor</span>
+      <button id="console-close" class="ghost small">✕</button>
+    </div>
+    <pre id="console-log" class="log mono"></pre>
+  </div>
+</div>
+
+<!-- Toasts de erro, no canto. -->
+<div id="toasts" class="toasts"></div>
+
+<script src="/vendor/socket.io.min.js"></script>
+<script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

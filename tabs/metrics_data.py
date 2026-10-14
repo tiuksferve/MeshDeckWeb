@@ -12,12 +12,49 @@ CORRECÇÕES (v1.0.3):
   - IMPRECISÃO: n_gps_unique usa _node_pos (coords validadas)
   - MELHORIA: nova secção "Nó Local"
 """
+import logging
 import math
 import time
 from datetime import datetime
 from i18n import tr
 
+logger = logging.getLogger("MeshDeck.metrics")
+
 _CH_TTL_S = 1800   # 30 min sem actualização → expirar valor de ch_util/air_tx
+
+# Campos de LocalStats e HostMetrics (telemetry.proto), em camelCase como a
+# biblioteca os entrega. Os uint64 chegam como texto (JSON do protobuf).
+_LOCAL_STATS_FIELDS = (
+    "uptimeSeconds", "channelUtilization", "airUtilTx", "numPacketsTx", "numPacketsRx",
+    "numPacketsRxBad", "numOnlineNodes", "numTotalNodes", "numRxDupe", "numTxRelay",
+    "numTxRelayCanceled", "heapTotalBytes", "heapFreeBytes", "numTxDropped", "noiseFloor",
+)
+# Ambiente e qualidade do ar: (campo camelCase, etiqueta por traduzir,
+# unidade, casas decimais). Só os campos que os sensores comuns enviam.
+ENV_FIELDS = (
+    ("temperature",        "Temperatura",      "°C",    1),
+    ("relativeHumidity",   "Humidade",         "%",     0),
+    ("barometricPressure", "Pressão",          "hPa",   0),
+    ("iaq",                "IAQ",              "",      0),
+    ("gasResistance",      "Gás",              "MΩ",    2),
+    ("co2",                "CO₂",              "ppm",   0),
+    ("pm25Standard",       "PM2.5",            "µg/m³", 0),
+    ("lux",                "Luz",              "lx",    0),
+    ("uvLux",              "UV",               "lx",    1),
+    ("windSpeed",          "Vento",            "m/s",   1),
+    ("windDirection",      "Direcção do vento", "°",    0),
+    ("rainfall1h",         "Chuva 1h",         "mm",    1),
+    ("rainfall24h",        "Chuva 24h",        "mm",    1),
+    ("soilMoisture",       "Humidade do solo", "%",     0),
+    ("soilTemperature",    "Temp. do solo",    "°C",    1),
+    ("radiation",          "Radiação",         "µR/h",  1),
+    ("voltage",            "Tensão (sensor)",  "V",     2),
+    ("current",            "Corrente (sensor)", "mA",   0),
+)
+_ENV_KEYS = {f[0] for f in ENV_FIELDS}
+
+_HOST_FIELDS = ("uptimeSeconds", "freememBytes", "diskfree1Bytes", "diskfree2Bytes",
+                "diskfree3Bytes", "load1", "load5", "load15")
 
 
 class MetricsDataMixin:
@@ -32,8 +69,22 @@ class MetricsDataMixin:
         self._air_tx: dict   = {}
         self._ch_util_ts: list = []
 
-        self._snr_values: list = []
+        self._snr_values: list = []     # só pacotes recebidos por rádio
         self._hops_values: list = []
+        self._rssi_values: list = []
+        # Por nó (rádio): últimas amostras de SNR e RSSI, hops do último pacote.
+        self._node_radio: dict = {}
+        # Pacotes que chegaram sem hops restantes (hop_limit esgotado), sobre
+        # os que trazem hop_start (firmware ≥ 2.3) — o denominador.
+        self._hop_exhausted: int = 0
+        self._hop_measured: int  = 0
+        self._mqtt_excluded: int = 0    # pacotes MQTT fora das estatísticas de rádio
+        # Nós ouvidos directamente (0 hops, por rádio): {nid: {'n','best','snr','ts'}}
+        self._direct: dict = {}
+        # Retransmissores: o firmware ≥ 2.6 diz só o ÚLTIMO BYTE do nó que
+        # retransmitiu (relay_node). {byte: contagem} e o total com essa info.
+        self._relay_counts: dict = {}
+        self._relayed_total: int = 0
         self._portnum_counts: dict = {}
 
         self._battery: dict = {}
@@ -45,10 +96,17 @@ class MetricsDataMixin:
         self._hw_model: dict  = {}
 
         self._msgs_sent         = 0
+        self._msgs_sent_channel = 0   # broadcast: nunca recebe ACK real do destino
         self._msgs_acked        = 0
-        self._msgs_ack_implicit = 0
+        self._msgs_ack_implicit = 0   # confirmadas só por retransmissão ouvida
         self._msgs_naked        = 0
-        self._sent_packet_ids: set = set()
+        self._dm_acked          = 0   # a taxa de entrega só faz sentido em DMs
+        self._dm_naked          = 0
+        # Estado de cada mensagem enviada: 'pending' → 'implicit' → 'ack'/'nak'.
+        # Cada mensagem conta num só estado, por isso pendentes = enviadas −
+        # confirmadas − falhadas − implícitas, sem nunca crescer sem fim.
+        self._sent_state: dict = {}
+        self._sent_kind: dict  = {}
 
         self._pkt_ids: dict    = {}
         self._pkt_ids_ever: int = 0
@@ -75,6 +133,21 @@ class MetricsDataMixin:
         self._local_hw_model: str   = ''
         self._local_snr_rx: list    = []
         self._local_dc_ts: list     = []
+
+        # LocalStats: contadores do firmware desde o arranque do nó. Guarda-se
+        # a amostra anterior para mostrar o que mudou entre dois envios.
+        self._local_stats: dict      = {}
+        self._local_stats_prev: dict = {}
+        self._local_stats_ts: float  = 0.0
+        self._noise_ts: list         = []    # (ts, noise floor dBm)
+        # HostMetrics: a máquina onde corre o meshtasticd.
+        self._host: dict             = {}
+        self._host_ts: float         = 0.0
+
+        # Ambiente/qualidade do ar e energia (INA), por nó: últimos valores.
+        self._env: dict    = {}    # {nid: {'ts': float, 'values': {campo: valor}}}
+        self._env_temp_ts: dict = {}   # {nid: [(ts, °C)]} para o gráfico
+        self._power: dict  = {}    # {nid: {'ts': float, 'channels': {n: [V, mA]}}}
 
     # ── helpers TTL ──────────────────────────────────────────────────────
     def _ch_val(self, nid: str) -> float:
@@ -114,14 +187,17 @@ class MetricsDataMixin:
 
     # ── ingestão ─────────────────────────────────────────────────────────
     # ── ingestão ─────────────────────────────────────────────────────────
-    def ingest_packet(self, packet: dict, node_data: dict):
+    def ingest_packet(self, packet: dict, node_data: dict, nid: str = ''):
         """
-        [DEPRECATED] Mantido temporariamente para compatibilidade com batch inicial.
-        Redireciona para ingest_raw_packet para garantir lógica única.
+        Actualização de um nó vinda do worker.
+
+        Sem pacote (lote inicial da NodeDB, leitura do nó local): só os campos
+        do nó, identificado por `nid` — sem ele não há a quem os atribuir.
+        Com pacote: só para quem não liga raw_packet_received; quem liga
+        (desktop e servidor) não deve passar o pacote aqui, ou conta-o duas vezes.
         """
         if not packet:
-            # Update sem pacote (ex: poll manual do nó local)
-            self._update_from_node_data(packet.get('fromId', '') if packet else '', node_data)
+            self._update_from_node_data(nid, node_data)
             return
 
         # Garante que o pacote tem o node_data fundido se necessário
@@ -136,10 +212,12 @@ class MetricsDataMixin:
         """Fallback para actualização de métricas sem recepção de pacote real."""
         if not nid or not node_data: return
         ts = time.time()
+        if node_data.get('short_name'):
+            self._node_short[nid] = node_data['short_name']
         for field, target in [('battery_level', '_battery'), ('voltage', '_voltage'),
                              ('uptime_seconds', '_uptime'), ('hw_model', '_hw_model')]:
             val = node_data.get(field)
-            if val is not None:
+            if val is not None and val != '':   # hw_model vazio = ainda desconhecido
                 if field == 'voltage': val = round(float(val), 3)
                 getattr(self, target)[nid] = val
 
@@ -155,6 +233,7 @@ class MetricsDataMixin:
             if node_data.get('battery_level') is not None: self._local_battery = int(node_data['battery_level'])
             if node_data.get('voltage') is not None:       self._local_voltage = round(float(node_data['voltage']), 3)
             if node_data.get('uptime_seconds') is not None: self._local_uptime = int(node_data['uptime_seconds'])
+            if node_data.get('hw_model'): self._local_hw_model = node_data['hw_model']
 
         # Posição
         lat = node_data.get('latitude')
@@ -174,22 +253,48 @@ class MetricsDataMixin:
         decoded = packet.get('decoded') or {}
         portnum = decoded.get('portnum', 'UNKNOWN_APP')
         snr     = packet.get('rxSnr')
-        via_mqtt = packet.get('viaMqtt', False)
+        rssi    = packet.get('rxRssi')
+        transport = str(packet.get('transportMechanism') or '')
+        via_mqtt = bool(packet.get('viaMqtt')) or 'MQTT' in transport
 
         # Contexto resolvido pelo worker
         short_name = packet.get('shortName')
-        hops       = packet.get('hopsAway')
 
         if nid and short_name:
             self._node_short[nid] = short_name
 
+        # Só os pacotes ouvidos pela rádio do nó local medem a rádio: os que
+        # chegam por MQTT não têm SNR/RSSI reais (vêm a 0 ou ausentes) e os
+        # ecos do próprio nó não foram recebidos de ninguém.
+        is_local = bool(self._local_nid) and nid == self._local_nid
+        radio = not via_mqtt and not is_local
+        if via_mqtt:
+            self._mqtt_excluded += 1
+
+        # Hops deste pacote: hop_start − hop_limit (firmware ≥ 2.3). A
+        # biblioteca omite campos a 0, por isso hopLimit ausente com hopStart
+        # presente quer dizer 0 hops restantes. Sem hopStart, cai no valor
+        # guardado na NodeDB (hopsAway), menos fiel mas melhor que nada.
+        hops = None
+        hop_start = packet.get('hopStart') or 0
+        if radio:
+            if hop_start:
+                hop_limit = packet.get('hopLimit') or 0
+                if 0 <= hop_limit <= hop_start:
+                    hops = hop_start - hop_limit
+                    self._hop_measured += 1
+                    if hop_limit == 0 and hop_start > 0:
+                        self._hop_exhausted += 1
+            if hops is None and packet.get('hopsAway') is not None:
+                hops = int(packet.get('hopsAway'))
+
         # 1. Timeline e Contadores (RF Qual, Tráfego)
         # -------------------------------------------
-        self._packets.append((ts, nid, portnum, snr, hops, via_mqtt))
+        self._packets.append((ts, nid, portnum, snr if radio else None, hops, via_mqtt))
         if len(self._packets) > 5000:
             self._packets = self._packets[-4000:]
 
-        if snr is not None:
+        if radio and snr is not None:
             val_snr = float(snr)
             self._snr_values.append(val_snr)
             if len(self._snr_values) > 2000: self._snr_values = self._snr_values[-1500:]
@@ -197,9 +302,36 @@ class MetricsDataMixin:
             self._local_snr_rx.append(val_snr)
             if len(self._local_snr_rx) > 500: self._local_snr_rx = self._local_snr_rx[-400:]
 
+        if radio and rssi:          # 0/ausente = sem medição
+            self._rssi_values.append(int(rssi))
+            if len(self._rssi_values) > 2000: self._rssi_values = self._rssi_values[-1500:]
+
         if hops is not None:
             self._hops_values.append(int(hops))
             if len(self._hops_values) > 2000: self._hops_values = self._hops_values[-1500:]
+
+        if radio and nid and hops == 0:
+            d = self._direct.setdefault(nid, {'n': 0, 'best': None, 'snr': None, 'ts': ts})
+            d['n'] += 1
+            d['ts'] = ts
+            if snr is not None:
+                d['snr'] = float(snr)
+                d['best'] = float(snr) if d['best'] is None else max(d['best'], float(snr))
+
+        # Num pacote com hops > 0, relay_node é o último salto antes de nós.
+        # Num pacote directo seria o próprio emissor, por isso não conta.
+        relay = packet.get('relayNode')
+        if radio and relay and hops:
+            byte = int(relay) & 0xff
+            self._relay_counts[byte] = self._relay_counts.get(byte, 0) + 1
+            self._relayed_total += 1
+
+        if radio and nid and (snr is not None or rssi):
+            entry = self._node_radio.setdefault(nid, {'snr': [], 'rssi': [], 'hops': None, 'n': 0})
+            entry['n'] += 1
+            if snr is not None: entry['snr'] = (entry['snr'] + [float(snr)])[-20:]
+            if rssi:            entry['rssi'] = (entry['rssi'] + [int(rssi)])[-20:]
+            if hops is not None: entry['hops'] = hops
 
         self._portnum_counts[portnum] = self._portnum_counts.get(portnum, 0) + 1
 
@@ -219,6 +351,15 @@ class MetricsDataMixin:
         # -------------------------------------
         if portnum == 'TELEMETRY_APP':
             tel = decoded.get('telemetry', {})
+            if tel.get('localStats'):
+                self._ingest_local_stats(nid, tel['localStats'], ts)
+            if tel.get('hostMetrics'):
+                self._ingest_host_metrics(nid, tel['hostMetrics'], ts)
+            if nid and (tel.get('environmentMetrics') or tel.get('airQualityMetrics')):
+                self._ingest_environment(nid, {**(tel.get('airQualityMetrics') or {}),
+                                               **(tel.get('environmentMetrics') or {})}, ts)
+            if nid and tel.get('powerMetrics'):
+                self._ingest_power(nid, tel['powerMetrics'], ts)
             dm  = tel.get('deviceMetrics', {})
             if dm and nid:
                 batt    = dm.get('batteryLevel')
@@ -245,7 +386,9 @@ class MetricsDataMixin:
                     if ch_util is not None: self._local_ch_util = float(ch_util)
                     if air_tx is not None:
                         self._local_air_tx = float(air_tx)
-                        dc = round(min(float(air_tx) * 6, 100.0), 2)
+                        # airUtilTx já é a % de TX na última hora (protobuf):
+                        # é directamente o duty cycle horário.
+                        dc = round(min(float(air_tx), 100.0), 2)
                         self._local_dc_ts.append((ts, dc))
                         if len(self._local_dc_ts) > 120: self._local_dc_ts = self._local_dc_ts[-120:]
                     if batt is not None: self._local_battery = int(batt)
@@ -318,6 +461,181 @@ class MetricsDataMixin:
             self._nodes_active_ts.append((ts, active))
             if len(self._nodes_active_ts) > 120: self._nodes_active_ts = self._nodes_active_ts[-120:]
 
+    @staticmethod
+    def _numbers(raw: dict, fields) -> dict:
+        out = {}
+        for key in fields:
+            val = raw.get(key)
+            if val is None:
+                continue
+            try:
+                out[key] = float(val) if key in ("channelUtilization", "airUtilTx") else int(val)
+            except (TypeError, ValueError):
+                pass
+        return out
+
+    def _ingest_local_stats(self, nid: str, raw: dict, ts: float):
+        """LocalStats só sai do nó local para a app (nunca vai para a rede)."""
+        stats = self._numbers(raw, _LOCAL_STATS_FIELDS)
+        # A biblioteca omite os campos a 0: um contador ausente vale 0.
+        for key in _LOCAL_STATS_FIELDS:
+            if key not in ("channelUtilization", "airUtilTx", "noiseFloor"):
+                stats.setdefault(key, 0)
+        logger.debug("LocalStats de %s: rx=%s tx=%s rx_bad=%s dupe=%s relay=%s/%s dropped=%s "
+                     "noise=%s online=%s/%s", nid, stats["numPacketsRx"], stats["numPacketsTx"],
+                     stats["numPacketsRxBad"], stats["numRxDupe"], stats["numTxRelay"],
+                     stats["numTxRelayCanceled"], stats["numTxDropped"], stats.get("noiseFloor"),
+                     stats["numOnlineNodes"], stats["numTotalNodes"])
+        # Reinício do nó (uptime a recuar): os contadores recomeçam, não há delta.
+        prev = self._local_stats
+        restarted = bool(prev) and stats["uptimeSeconds"] < prev.get("uptimeSeconds", 0)
+        self._local_stats_prev = {} if restarted else prev
+        self._local_stats = stats
+        self._local_stats_ts = ts
+        if stats.get("noiseFloor"):
+            self._noise_ts.append((ts, stats["noiseFloor"]))
+            if len(self._noise_ts) > 120: self._noise_ts = self._noise_ts[-120:]
+        # Também trazem utilização do canal, airtime e uptime do nó local.
+        if not self._local_nid or nid == self._local_nid:
+            if "channelUtilization" in stats: self._local_ch_util = stats["channelUtilization"]
+            if "airUtilTx" in stats:
+                self._local_air_tx = stats["airUtilTx"]
+                self._local_dc_ts.append((ts, round(min(stats["airUtilTx"], 100.0), 2)))
+                if len(self._local_dc_ts) > 120: self._local_dc_ts = self._local_dc_ts[-120:]
+            if stats["uptimeSeconds"]: self._local_uptime = stats["uptimeSeconds"]
+
+    def _ingest_host_metrics(self, nid: str, raw: dict, ts: float):
+        host = self._numbers(raw, _HOST_FIELDS)
+        if raw.get("userString"):
+            host["userString"] = str(raw["userString"])
+        logger.debug("HostMetrics de %s: load1=%s freemem=%s disk1=%s uptime=%s", nid,
+                     host.get("load1"), host.get("freememBytes"), host.get("diskfree1Bytes"),
+                     host.get("uptimeSeconds"))
+        self._host = host
+        self._host_ts = ts
+
+    def _ingest_environment(self, nid: str, raw: dict, ts: float):
+        values = {}
+        for key in _ENV_KEYS:
+            val = raw.get(key)
+            if isinstance(val, (int, float)) and not (isinstance(val, float) and math.isnan(val)):
+                values[key] = float(val)
+        if not values:
+            return
+        entry = self._env.setdefault(nid, {'ts': ts, 'values': {}})
+        entry['ts'] = ts
+        entry['values'].update(values)        # um envio pode trazer só parte
+        if 'temperature' in values:
+            series = self._env_temp_ts.setdefault(nid, [])
+            series.append((ts, round(values['temperature'], 1)))
+            if len(series) > 120: del series[:-120]
+
+    def _ingest_power(self, nid: str, raw: dict, ts: float):
+        channels = {}
+        for ch in range(1, 9):
+            v, i = raw.get(f"ch{ch}Voltage"), raw.get(f"ch{ch}Current")
+            if v is not None or i is not None:
+                channels[ch] = [round(float(v), 2) if v is not None else None,
+                                round(float(i)) if i is not None else None]
+        if channels:
+            entry = self._power.setdefault(nid, {'ts': ts, 'channels': {}})
+            entry['ts'] = ts
+            entry['channels'].update(channels)
+
+    def _data_environment(self) -> dict:
+        """Últimos valores de ambiente e energia por nó, e a temperatura no tempo."""
+        now = time.time()
+        def ago(ts):
+            m = int((now - ts) // 60)
+            return tr("agora") if m < 1 else tr("há {n} min", n=m) if m < 60 else tr("há {n} h", n=m // 60)
+        cols = [f for f in ENV_FIELDS if any(f[0] in e['values'] for e in self._env.values())]
+        env_rows = []
+        for nid, e in sorted(self._env.items(), key=lambda x: self._name(x[0]).lower()):
+            cells = []
+            for key, _label, unit, dec in cols:
+                v = e['values'].get(key)
+                cells.append(None if v is None else f"{v:.{dec}f}{' ' + unit if unit else ''}")
+            env_rows.append([nid, self._name(nid), cells, ago(e['ts']), now - e['ts'] > 7200])
+        power_rows = []
+        for nid, p in sorted(self._power.items(), key=lambda x: self._name(x[0]).lower()):
+            parts = []
+            for ch, (v, i) in sorted(p['channels'].items()):
+                txt = " · ".join(x for x in (f"{v} V" if v is not None else "", f"{i} mA" if i is not None else "") if x)
+                parts.append(f"ch{ch}: {txt}")
+            power_rows.append([nid, self._name(nid), parts, ago(p['ts'])])
+        temps = {nid: e['values']['temperature'] for nid, e in self._env.items() if 'temperature' in e['values']}
+        hottest = max(temps, key=temps.get) if temps else None
+        coldest = min(temps, key=temps.get) if temps else None
+        # Gráfico: os 6 nós com mais amostras, cada um na sua linha.
+        series = sorted(self._env_temp_ts.items(), key=lambda x: -len(x[1]))[:6]
+        return {
+            "n_env": len(self._env), "n_power": len(self._power),
+            "cols": [[tr(label), unit] for _k, label, unit, _d in cols],
+            "env_rows": env_rows, "power_rows": power_rows,
+            "temp_avg": round(sum(temps.values()) / len(temps), 1) if temps else None,
+            "temp_max": [self._name(hottest), round(temps[hottest], 1)] if hottest else None,
+            "temp_min": [self._name(coldest), round(temps[coldest], 1)] if coldest else None,
+            "temp_series": [{"name": self._name(nid),
+                             "points": [{"x": round(t * 1000), "y": v} for t, v in pts]}
+                            for nid, pts in series],
+            "now": self._now_str(),
+        }
+
+    # Limiares indicativos da saúde do rádio (LocalStats).
+    DUPE_WARN, DUPE_CRIT = 40.0, 70.0     # % de RX que eram repetições
+    BAD_WARN, BAD_CRIT   = 5.0, 15.0      # % de RX corrompidos (ruído/colisões)
+    NOISE_WARN, NOISE_CRIT = -105, -95    # dBm: acima disto o ruído de fundo é alto
+
+    def _data_radio_health(self) -> dict:
+        """Saúde do rádio local (LocalStats) e da máquina (HostMetrics)."""
+        s = self._local_stats
+        if not s:
+            return {"has_stats": False, "has_host": bool(self._host), **self._data_host()}
+        rx, tx = s["numPacketsRx"], s["numPacketsTx"]
+        relays = s["numTxRelay"] + s["numTxRelayCanceled"]
+        pct = lambda a, b: round(a / b * 100, 1) if b else None
+        prev = self._local_stats_prev
+        delta = {}
+        if prev:
+            minutes = max((s["uptimeSeconds"] - prev.get("uptimeSeconds", 0)) / 60, 0)
+            for key in ("numPacketsRx", "numPacketsTx", "numRxDupe", "numPacketsRxBad",
+                        "numTxRelay", "numTxDropped"):
+                delta[key] = max(s[key] - prev.get(key, 0), 0)
+            delta["minutes"] = round(minutes, 1)
+        return {
+            "has_stats": True, "has_host": bool(self._host),
+            "rx": rx, "tx": tx, "rx_bad": s["numPacketsRxBad"], "dupe": s["numRxDupe"],
+            "relay": s["numTxRelay"], "relay_canceled": s["numTxRelayCanceled"],
+            "dropped": s["numTxDropped"],
+            "dupe_pct": pct(s["numRxDupe"], rx),
+            "bad_pct": pct(s["numPacketsRxBad"], rx),
+            "relay_cancel_pct": pct(s["numTxRelayCanceled"], relays),
+            "drop_pct": pct(s["numTxDropped"], tx + s["numTxDropped"]),
+            "noise": s.get("noiseFloor"),
+            "online": s["numOnlineNodes"], "total": s["numTotalNodes"],
+            "heap_free": s["heapFreeBytes"], "heap_total": s["heapTotalBytes"],
+            "uptime": s["uptimeSeconds"],
+            "delta": delta,
+            "stats_at": datetime.fromtimestamp(self._local_stats_ts).strftime('%H:%M:%S'),
+            "noise_ts_labels": [self._ts_label(t) for t, _ in self._noise_ts],
+            "noise_ts_vals": [v for _, v in self._noise_ts],
+            **self._data_host(),
+        }
+
+    def _data_host(self) -> dict:
+        h = self._host
+        if not h:
+            return {}
+        gb = lambda b: round(b / 1e9, 1) if b else None
+        return {
+            "host_load": [round(h.get(k, 0) / 100, 2) for k in ("load1", "load5", "load15")],
+            "host_mem_mb": round(h["freememBytes"] / 1e6) if h.get("freememBytes") else None,
+            "host_disk_gb": [gb(h.get(k)) for k in ("diskfree1Bytes", "diskfree2Bytes", "diskfree3Bytes")],
+            "host_uptime": h.get("uptimeSeconds"),
+            "host_user": h.get("userString", ""),
+            "host_at": datetime.fromtimestamp(self._host_ts).strftime('%H:%M:%S'),
+        }
+
     def ingest_node_position(self, nid: str, lat: float, lon: float):
         """FIX: _node_pos inicializado em _reset_data; filtra coords (0,0)."""
         if nid and lat is not None and lon is not None:
@@ -325,14 +643,27 @@ class MetricsDataMixin:
                 self._node_pos[nid] = (lat, lon)
 
     def ingest_message_status(self, req_id: int, status: str):
-        if req_id not in self._sent_packet_ids:
-            return
+        """ACK real, NAK ou ACK implícito (o nó ouviu alguém retransmitir).
+
+        Uma mensagem passa por pending → implicit → ack/nak; cada transição
+        tira-a de um contador e põe-na noutro. Uma mensagem de canal fica em
+        'implicit': em broadcast não há destinatário que devolva ACK.
+        """
+        prev = self._sent_state.get(req_id)
+        if prev not in ('pending', 'implicit'):
+            return                      # desconhecida ou já resolvida
+        is_dm = self._sent_kind.get(req_id) == 'dm'
+        if status in ('ack', 'nak') and prev == 'implicit':
+            self._msgs_ack_implicit -= 1
         if status == 'nak':
             self._msgs_naked += 1
-            self._sent_packet_ids.discard(req_id)
+            if is_dm: self._dm_naked += 1
+            self._sent_state[req_id] = 'nak'
             self._sent_ts.pop(req_id, None)
         elif status == 'ack':
             self._msgs_acked += 1
+            if is_dm: self._dm_acked += 1
+            self._sent_state[req_id] = 'ack'
             sent_at = self._sent_ts.pop(req_id, None)
             if sent_at is not None:
                 rtt = round(time.time() - sent_at, 2)
@@ -340,17 +671,37 @@ class MetricsDataMixin:
                     self._rtt_values.append(rtt)
                     if len(self._rtt_values) > 200:
                         self._rtt_values = self._rtt_values[-150:]
-            self._sent_packet_ids.discard(req_id)
-        elif status == 'ack_implicit':
+        elif status == 'ack_implicit' and prev == 'pending':
             self._msgs_ack_implicit += 1
+            self._sent_state[req_id] = 'implicit'
         self._refresh_if_reliability()
 
-    def ingest_message_sent(self, packet_id: int):
+    def ingest_message_sent(self, packet_id: int, kind: str = 'dm'):
+        """kind: 'dm' (espera ACK do destinatário) ou 'channel' (broadcast)."""
         self._msgs_sent += 1
+        if kind == 'channel':
+            self._msgs_sent_channel += 1
         if packet_id:
-            self._sent_packet_ids.add(packet_id)
+            self._sent_state[packet_id] = 'pending'
+            self._sent_kind[packet_id] = kind
             self._sent_ts[packet_id] = time.time()
+            # Limita a memória numa sessão longa; os contadores mantêm-se.
+            if len(self._sent_state) > 2000:
+                for old in list(self._sent_state)[:500]:
+                    self._sent_state.pop(old, None)
+                    self._sent_kind.pop(old, None)
+                    self._sent_ts.pop(old, None)
         self._refresh_if_reliability()
+
+    def _pending(self) -> int:
+        return max(self._msgs_sent - self._msgs_acked - self._msgs_naked
+                   - self._msgs_ack_implicit, 0)
+
+    def _delivery(self):
+        """Taxa de entrega das DMs: ACK do destinatário ÷ (ACK + NAK).
+        As mensagens de canal não entram — nunca têm ACK real."""
+        total = self._dm_acked + self._dm_naked
+        return round(self._dm_acked / total * 100, 1) if total > 0 else None
 
     def _refresh_if_reliability(self):
         if getattr(self, '_current_key', None) in ('reliability', 'local_node'):
@@ -383,8 +734,7 @@ class MetricsDataMixin:
         air_active = self._air_tx_active()
         ch_avg     = round(sum(ch_active.values())/len(ch_active), 1) if ch_active else None
         air_avg    = round(sum(air_active.values())/len(air_active), 1) if air_active else None
-        total_r    = self._msgs_acked + self._msgs_naked
-        delivery   = round(self._msgs_acked/total_r*100, 1) if total_r > 0 else None
+        delivery   = self._delivery()
         nid_counts = {}
         for p in self._packets:
             if p[1]: nid_counts[p[1]] = nid_counts.get(p[1], 0) + 1
@@ -402,7 +752,7 @@ class MetricsDataMixin:
     def _data_channel(self) -> dict:
         ch_active  = self._ch_util_active()
         air_active = self._air_tx_active()
-        duty       = {nid: round(min(a*6, 100.0), 2) for nid, a in air_active.items()}
+        duty       = {nid: round(min(a, 100.0), 2) for nid, a in air_active.items()}
         duty_avg   = round(sum(duty.values())/len(duty), 2) if duty else None
         worst_nid  = max(duty, key=duty.get) if duty else None
         worst_dc   = duty[worst_nid] if worst_nid else None
@@ -416,12 +766,13 @@ class MetricsDataMixin:
         for nid in all_nids:
             ch  = ch_active.get(nid, 0)
             air = air_active.get(nid, 0)
-            dc  = duty.get(nid, round(min(air*6, 100.0), 2))
+            dc  = duty.get(nid, round(min(air, 100.0), 2))
             rows.append([nid, self._name(nid), round(ch,1), round(air,2), dc])
         return {"duty_avg":duty_avg, "worst_dc":worst_dc, "worst_name":worst_name,
                 "air_avg":air_avg, "ch_net_avg":ch_net_avg,
                 "ts_labels":ts_labels, "ts_vals":ts_vals, "rows":rows, "now":self._now_str(),
-                "lbl_exceed": tr("🚨 Excede limite"), "lbl_warn": tr("⚠ Atenção"), "lbl_ok": "✅ OK"}
+                "lbl_exceed": tr("🚨 LIMITE EXCEDIDO"), "lbl_warn": tr("⚠ Próximo do limite"),
+                "lbl_ok": tr("lbl_dc_optimal")}
 
     def _rf_assessment(self, snr_avg, snr_med, snr_p10, hops_values) -> str:
         if snr_avg is None or not self._snr_values:
@@ -460,6 +811,11 @@ class MetricsDataMixin:
             lines.append(tr("topologia", pct_direct=f"{pct_direct:.0f}", pct_1hop=f"{pct_1hop:.0f}",
                             avg_hops=avg_hops, max_hops=max_hops))
             if avg_hops > 2.5: lines.append(tr("⚠️ Média de hops elevada"))
+            if self._hop_measured >= 20:
+                exh = self._hop_exhausted / self._hop_measured * 100
+                if exh >= self.HOP_EXHAUSTED_WARN:
+                    lines.append(tr("⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: nós mais longe podem não estar a ser ouvidos. Considere aumentar o hop limit.",
+                                    pct=f"{exh:.0f}"))
             if max_hops >= 6:  lines.append(tr("⚠️ Máximo de hops", max_hops=max_hops))
         if pct_ok >= 70 and (not hops_values or sum(hops_values)/len(hops_values) < 2):
             lines.append(tr("conclusao_verde"))
@@ -489,11 +845,64 @@ class MetricsDataMixin:
         # FIX: percentil correcto — int(0.1*(n-1)) em vez de n//10
         snr_p10    = round(snr_sorted[int(0.1*(n-1))], 1) if n else None
         assessment = self._rf_assessment(snr_avg, snr_med, snr_p10, self._hops_values)
-        return {"n":n, "snr_avg":snr_avg, "snr_med":snr_med, "snr_p10":snr_p10,
+        return {**self._data_rf_radio(),
+                "n":n, "snr_avg":snr_avg, "snr_med":snr_med, "snr_p10":snr_p10,
                 "snr_labels":snr_labels, "snr_counts":snr_counts,
                 "hop_labels":hop_labels, "hop_counts":hop_counts,
                 "assessment": assessment, "unit_amostras": tr("amostras"),
+                "lbl_median": tr("mediana"),
                 "p10_note": tr("(mínimo se n<10)") if n and n < 10 else ""}
+
+    # Limiares do diagnóstico por nó. Em LoRa o RSSI mede tudo o que chega
+    # (sinal + ruído) e o SNR quanto o sinal sobressai do ruído: SNR baixo
+    # com RSSI forte aponta para ruído/interferência; com RSSI fraco, para
+    # distância ou obstáculos. São indicativos, não um diagnóstico certo.
+    RSSI_STRONG_DBM = -100
+    # LoRa descodifica abaixo de 0 dB (LongFast até ≈ −17 dB): só abaixo
+    # disto o SNR é baixo o bastante para merecer diagnóstico.
+    SNR_LOW_DB = -5.0
+    HOP_EXHAUSTED_WARN = 5.0    # % de pacotes sem hops restantes
+    HOP_EXHAUSTED_CRIT = 15.0
+
+    @classmethod
+    def radio_diagnosis(cls, snr, rssi) -> str:
+        """'ok', 'noise', 'weak' ou '' (sem dados)."""
+        if snr is None:
+            return ''
+        if snr >= cls.SNR_LOW_DB:
+            return 'ok'
+        if rssi is not None and rssi > cls.RSSI_STRONG_DBM:
+            return 'noise'
+        return 'weak'
+
+    def _data_rf_radio(self) -> dict:
+        """RSSI, hop limit esgotado e a tabela SNR × RSSI por nó."""
+        rssi = sorted(self._rssi_values)
+        n_rssi = len(rssi)
+        exhausted_pct = (round(self._hop_exhausted / self._hop_measured * 100, 1)
+                         if self._hop_measured else None)
+        node_rows = []
+        for nid, e in self._node_radio.items():
+            snr_avg = round(sum(e['snr']) / len(e['snr']), 1) if e['snr'] else None
+            rssi_avg = round(sum(e['rssi']) / len(e['rssi'])) if e['rssi'] else None
+            node_rows.append([nid, self._name(nid), e['n'], snr_avg, rssi_avg, e['hops'],
+                              self.radio_diagnosis(snr_avg, rssi_avg)])
+        # Os piores primeiro: é a tabela onde se procura o problema.
+        node_rows.sort(key=lambda r: (r[3] is None, r[3] if r[3] is not None else 0))
+        return {
+            "rssi_avg": round(sum(rssi) / n_rssi) if n_rssi else None,
+            "rssi_med": rssi[n_rssi // 2] if n_rssi else None,
+            "n_rssi": n_rssi,
+            "hop_exhausted": self._hop_exhausted, "hop_measured": self._hop_measured,
+            "hop_exhausted_pct": exhausted_pct,
+            "mqtt_excluded": self._mqtt_excluded,
+            "node_rows": node_rows,
+            "lbl_diag": {"ok": tr("✅ Boa"), "noise": tr("⚡ Ruído/interferência provável"),
+                         "weak": tr("📉 Sinal fraco (distância/obstáculos)"), "": "—"},
+            "lbl_exhausted_sub": tr("{n} de {m} pacotes chegaram sem hops restantes",
+                                    n=self._hop_exhausted, m=self._hop_measured),
+            "lbl_mqtt_excluded": tr("{n} pacotes MQTT excluídos", n=self._mqtt_excluded),
+        }
 
     def _data_traffic(self) -> dict:
         now = time.time()
@@ -572,9 +981,9 @@ class MetricsDataMixin:
 
     def _data_reliability(self) -> dict:
         total_resp = self._msgs_acked + self._msgs_naked
-        delivery   = round(self._msgs_acked / total_resp * 100, 1) if total_resp > 0 else None
+        delivery   = self._delivery()
         nak_rate   = round(self._msgs_naked / total_resp * 100, 1) if total_resp > 0 else None
-        pending    = max(self._msgs_sent - self._msgs_acked - self._msgs_naked, 0)
+        pending    = self._pending()
         rtt_avg    = round(sum(self._rtt_values)/len(self._rtt_values), 1)      if self._rtt_values else None
         rtt_min    = round(min(self._rtt_values), 1)                             if self._rtt_values else None
         rtt_max    = round(max(self._rtt_values), 1)                             if self._rtt_values else None
@@ -603,20 +1012,24 @@ class MetricsDataMixin:
             "net_nak_rate": net_nak_rate, "active_senders": active_senders,
             "p_col": p_col,
             "ch_util_avg": round(ch_util_avg, 1) if ch_util_avg is not None else None,
-            "lbl_dup": (
-                tr("Sem dados") if dup_rate is None else
-                tr("⚠ Atenção")  if dup_rate < 10 else
-                tr("✅ Flood saudável") if dup_rate <= 60 else
-                tr("[!] Possível congestionamento")
-            ),
             "lbl_col": (
                 tr("Sem dados de Ch.Util.") if p_col is None else
-                tr("✅ Flood saudável")      if p_col < 5  else
+                tr("✅ Baixo")               if p_col < 5  else
                 tr("⚠ Próximo do limite")   if p_col < 15 else
                 tr("[!] Risco elevado")
             ),
-            "lbl_pkt_sub": tr("{n} nós emissores · {m} duplicados vistos",
-                              n=active_senders, m=duplicates),
+            # O firmware filtra as repetições antes de entregar os pacotes à
+            # app: os duplicados vistos aqui não medem o flooding da rede.
+            "lbl_pkt_sub": tr("{n} nós emissores", n=active_senders),
+            # Duplicados reais: contados pelo firmware do nó local (LocalStats).
+            "ls_dupe_pct": (round(self._local_stats["numRxDupe"] / self._local_stats["numPacketsRx"] * 100, 1)
+                            if self._local_stats.get("numPacketsRx") else None),
+            "lbl_ls_dupe": (tr("{d} repetições em {r} pacotes recebidos (LocalStats, desde o arranque do nó)",
+                               d=self._local_stats["numRxDupe"], r=self._local_stats["numPacketsRx"])
+                            if self._local_stats else tr("⏳ Aguardando LocalStats do nó local")),
+            "sent_dm": self._msgs_sent - self._msgs_sent_channel,
+            "sent_channel": self._msgs_sent_channel,
+            "lbl_channel": tr("Canal"),
             "ever_seen": self._pkt_ids_ever > 0,
         }
 
@@ -698,8 +1111,53 @@ class MetricsDataMixin:
                     max_range = dist
                     max_pair  = (self._name(from_id), self._name(nb_id))
         rows.sort(key=lambda r: r[4], reverse=True)
+        direct = self._data_direct_range(haversine)
+        relayers = self._data_relayers()
         return {"rows": rows, "max_range": max_range, "max_pair": max_pair,
-                "n_with_gps": len(node_pos), "now": self._now_str()}
+                "n_with_gps": len(node_pos), "now": self._now_str(),
+                **direct, **relayers}
+
+    def _data_direct_range(self, haversine) -> dict:
+        """Distância do nó local a cada nó ouvido directamente (0 hops, rádio)."""
+        local = self._node_pos.get(self._local_nid) if self._local_nid else None
+        rows = []
+        for nid, d in self._direct.items():
+            pos = self._node_pos.get(nid)
+            dist = round(haversine(local[0], local[1], pos[0], pos[1]), 2) if local and pos else None
+            rows.append([nid, self._name(nid), dist, d['best'], d['snr'], d['n']])
+        # Com distância primeiro, da maior para a menor; sem GPS no fim.
+        rows.sort(key=lambda r: (r[2] is None, -(r[2] or 0)))
+        far = next((r for r in rows if r[2] is not None), None)
+        return {"direct_rows": rows, "n_direct": len(rows),
+                "max_direct": far[2] if far else None, "max_direct_name": far[1] if far else "—",
+                "has_local_pos": local is not None}
+
+    def _relay_candidates(self, byte: int) -> list:
+        known = set(self._node_short) | set(self._pkt_intervals) | set(self._node_pos)
+        out = []
+        for nid in known:
+            try:
+                if int(nid.lstrip('!'), 16) & 0xff == byte:
+                    out.append(nid)
+            except ValueError:
+                continue
+        return sorted(out)
+
+    def _data_relayers(self) -> dict:
+        """Quem mais retransmite para o nó local. Só se conhece o último byte
+        do ID: se vários nós conhecidos o partilham, a linha diz quais."""
+        rows = []
+        for byte, cnt in sorted(self._relay_counts.items(), key=lambda x: -x[1])[:12]:
+            cands = self._relay_candidates(byte)
+            name = (self._name(cands[0]) if len(cands) == 1 else
+                    " / ".join(self._name(c) for c in cands[:3]) if cands else "")
+            rows.append([f"…{byte:02x}", name, cnt,
+                         round(cnt / self._relayed_total * 100, 1), len(cands)])
+        return {"relay_rows": rows, "relayed_total": self._relayed_total,
+                "lbl_unknown_relay": tr("Nó desconhecido"),
+                "lbl_relay_hint": tr("relay_hint", n=self._relayed_total),
+                "lbl_no_gps": tr("sem GPS"),
+                "lbl_ambiguous": tr("ambíguo")}
 
     def _data_intervals(self) -> dict:
         rows = []
@@ -718,7 +1176,7 @@ class MetricsDataMixin:
 
     def _data_local_node(self) -> dict:
         """Dados da secção dedicada ao nó local."""
-        dc_est  = round(min(self._local_air_tx * 6, 100.0), 2)
+        dc_est  = round(min(self._local_air_tx, 100.0), 2)
         snr_avg = (round(sum(self._local_snr_rx)/len(self._local_snr_rx), 1)
                    if self._local_snr_rx else None)
         snr_min = round(min(self._local_snr_rx), 1) if self._local_snr_rx else None
@@ -734,9 +1192,9 @@ class MetricsDataMixin:
             return f"{m}m {sec:02d}s"
 
         total_resp = self._msgs_acked + self._msgs_naked
-        delivery   = round(self._msgs_acked / total_resp * 100, 1) if total_resp > 0 else None
+        delivery   = self._delivery()
         nak_rate   = round(self._msgs_naked / total_resp * 100, 1) if total_resp > 0 else None
-        pending    = max(self._msgs_sent - self._msgs_acked - self._msgs_naked, 0)
+        pending    = self._pending()
         rtt_avg    = (round(sum(self._rtt_values)/len(self._rtt_values), 1)
                      if self._rtt_values else None)
         rtt_med    = (round(sorted(self._rtt_values)[len(self._rtt_values)//2], 1)
@@ -781,6 +1239,8 @@ class MetricsDataMixin:
             "lat":           local_pos[0] if local_pos else None,
             "lon":           local_pos[1] if local_pos else None,
             "local_tx_pkts": local_tx_pkts,
+            "ls_ts":         self._local_stats_ts,
+            "host_ts":       self._host_ts,
             "now":           self._now_str(),
             # Labels traduzidos para uso no JS (update sem reload)
             "lbl_dc_optimal":  tr("lbl_dc_optimal"),
@@ -789,4 +1249,5 @@ class MetricsDataMixin:
             "lbl_packets":     tr("pacotes"),
             "lbl_rtt_avg":     tr("RTT médio"),
             "lbl_median":      tr("mediana"),
+            "lbl_pend":        tr("Pend."),
         }

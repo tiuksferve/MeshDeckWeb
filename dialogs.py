@@ -447,6 +447,19 @@ class ConsoleWindow(QWidget):
         self.hide()
         event.ignore()
 
+    def detach(self):
+        """Retira o handler do logger raiz. Idempotente.
+
+        Sem isto, o handler fica registado depois de a janela ser destruída e
+        a primeira linha de log seguinte escreve num widget C++ já inexistente.
+        Na aplicação a janela vive até ao fim do processo, por isso nunca se
+        notava; fora dela (testes, servidor) é uma falha dura.
+        """
+        handler = getattr(self, "_handler", None)
+        if handler is not None:
+            logging.getLogger().removeHandler(handler)
+            self._handler = None
+
 
 # ---------------------------------------------------------------------------
 # RebootWaitDialog — aguarda reinício do nó e libera reconexão

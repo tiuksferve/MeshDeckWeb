@@ -1,0 +1,652 @@
+/* Paleta herdada de constants.py, para a interface web ser reconhecível
+   como o mesmo produto que a aplicação desktop. */
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --input: #21262d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --green: #39d353;
+  --blue: #58a6ff;
+  --orange: #f0883e;
+  --red: #f85149;
+  --purple: #bc8cff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* O atributo hidden é regido pela folha de estilo do próprio browser
+   ([hidden]{display:none}), mas uma regra de autor com display definido no
+   mesmo elemento (como .overlay abaixo) tem sempre prioridade sobre essa
+   folha por omissão — toggling hidden deixa de funcionar nesse elemento.
+   Esta regra existe só para repor explicitamente esse comportamento. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+}
+
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.muted { color: var(--muted); font-size: 12px; }
+.error { color: var(--red); font-size: 12px; }
+.spacer { flex: 1; }
+.center { text-align: center; }
+
+/* ── overlays (login, modal de ligação) ───────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  background: rgba(13, 17, 23, .92); z-index: 50;
+}
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 28px; width: min(420px, 92vw); display: grid; gap: 12px;
+}
+.card h1 { font-size: 20px; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
+/* Lista de nós TCP guardados, no diálogo de ligação. */
+.saved-targets { display: grid; gap: 4px; }
+.target-list { margin: 0; max-height: 220px; overflow-y: auto; }
+.target-list li { align-items: center; padding: 6px 8px; }
+.target-list li.active { outline: 1px solid var(--blue); }
+.target-list .t-main { flex: 1; display: grid; min-width: 0; }
+.target-list .t-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.target-list .t-addr { font-size: 11px; color: var(--muted); }
+.target-list button { padding: 2px 6px; min-height: 0; }
+
+/* Menu do cabeçalho: idioma, consola e sair. */
+.menu-wrap { position: relative; }
+.menu-btn {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  width: 36px; height: 34px; padding: 0; font-size: 18px; line-height: 1;
+  display: grid; place-items: center;
+}
+.menu-btn[aria-expanded="true"] { border-color: var(--blue); color: var(--blue); }
+.menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 45; min-width: 240px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); padding: 8px; display: grid; gap: 4px;
+}
+.menu-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 2px 6px; }
+.menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+.menu-item {
+  background: none; border: 1px solid transparent; text-align: left;
+  padding: 9px 10px; border-radius: 6px; width: 100%;
+}
+.menu-item:hover:not(:disabled) { background: var(--input); border-color: transparent; }
+.menu-item.danger { color: var(--red); }
+.menu-item.danger:hover { background: #3d0a0a; }
+/* Selector de idioma em dois segmentos, em vez de uma lista pendente. */
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--input); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 3px; margin-bottom: 4px; }
+.seg button { background: none; border: none; border-radius: 6px; padding: 6px 4px; white-space: nowrap; font-weight: 600; color: var(--muted); }
+.seg button.active { background: var(--blue); color: #0d1117; }
+
+/* ── estrutura ──────────────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.brand-title { display: flex; align-items: center; gap: 8px; }
+/* Símbolo do Meshtastic: proporção 64×40 do SVG. */
+.brand-logo { height: 1em; width: auto; flex: none; }
+
+#tabs {
+  display: flex; gap: 2px; background: var(--panel);
+  border-bottom: 1px solid var(--border); padding: 0 12px; overflow-x: auto;
+}
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); padding: 10px 14px; font: inherit; cursor: pointer;
+  white-space: nowrap; position: relative;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--blue); }
+.badge {
+  display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 4px;
+  background: var(--red); color: #fff; border-radius: 8px;
+  font-size: 10px; line-height: 16px; text-align: center;
+}
+
+main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
+.panel-tab { display: none; max-width: 1400px; }
+.panel-tab.active { display: block; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px; overflow-x: auto;
+}
+.panel h2 {
+  font-size: 11px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--muted); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.panel.full { grid-column: 1 / -1; }
+
+.row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+
+input, select {
+  background: var(--input); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 9px; font: inherit; min-width: 0;
+}
+input:focus, select:focus { outline: 1px solid var(--blue); }
+.search { width: auto; flex: 1 1 120px; max-width: 220px; }
+
+button {
+  background: var(--input); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 14px; font: inherit; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--blue); }
+button:disabled { opacity: .5; cursor: default; }
+button[type="submit"] { border-color: var(--green); color: var(--green); }
+.ghost { color: var(--muted); background: none; border-color: transparent; }
+.ghost:hover:not(:disabled) { color: var(--text); }
+.small { padding: 2px 8px; font-size: 11px; }
+.theme-btn.active { border-color: var(--blue); color: var(--blue); }
+
+/* ── indicadores ────────────────────────────────────────────────────────── */
+.pill {
+  font-size: 11px; padding: 2px 9px; border-radius: 10px;
+  border: 1px solid var(--border); white-space: nowrap;
+}
+.pill.on { color: var(--green); border-color: var(--green); }
+.pill.off { color: var(--muted); }
+.pill.wait { color: var(--orange); border-color: var(--orange); }
+.pill.connect {
+  background: var(--green); color: #0d1117; border-color: var(--green);
+  font-size: 12px; font-weight: 700; padding: 4px 14px;
+  animation: pill-pulse 1.8s ease-in-out infinite;
+}
+.pill.connect:hover { filter: brightness(1.15); }
+@keyframes pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(57, 211, 83, .55); }
+  50%      { box-shadow: 0 0 0 7px rgba(57, 211, 83, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .pill.connect { animation: none; } }
+
+.banner {
+  padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.banner.warn { background: #3d2a0a; color: var(--orange); }
+.banner.info { background: #0a1f3d; color: var(--blue); margin-bottom: 14px; border-radius: 6px; border: 1px solid var(--border); }
+
+.stats { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 12px; }
+.stats div { display: grid; }
+.stats b { font-size: 22px; }
+.stats span { font-size: 11px; color: var(--muted); }
+
+.hint { margin: -4px 0 10px; }
+
+/* ── tabelas ────────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th {
+  text-align: left; padding: 6px 8px; font-weight: 400; font-size: 11px;
+  color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+th.num, td.num { text-align: right; }
+td.num { font-family: ui-monospace, Menlo, monospace; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--input); white-space: nowrap; }
+tbody tr:hover td { background: var(--input); }
+.is-local { background: #1a1000; color: var(--orange); }
+.is-fav { background: #2d2200; }
+.is-selected td { background: #1a3a1a; }
+.row-action { cursor: pointer; text-align: center; }
+.row-action:hover { color: var(--blue); }
+
+/* ── plain lists (canais, DMs, traceroutes, secções) ──────────────────────── */
+.plain-list { list-style: none; display: grid; gap: 2px; margin-bottom: 14px; }
+.plain-list li {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.plain-list li:hover { background: var(--input); }
+.plain-list li.active { background: var(--input); color: var(--blue); }
+.plain-list li .unread {
+  background: var(--red); color: #fff; border-radius: 8px;
+  font-size: 10px; padding: 0 5px; min-width: 16px; text-align: center;
+}
+
+/* ── mapa ───────────────────────────────────────────────────────────────── */
+.map-layout { display: grid; grid-template-columns: 1fr 240px; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }
+/* isolation: os z-index internos do Leaflet (400–1000) ficam contidos no
+   mapa; sem isto o mapa passava por cima dos diálogos, avisos e menu. */
+#map-canvas { border: 1px solid var(--border); border-radius: 8px; background: #000; isolation: isolate; }
+.map-side { overflow-y: auto; }
+.map-side-toggle, .map-side-head { display: none; }
+/* Lista de traceroutes: origem → destino, hora e botão para enquadrar a rota. */
+#tr-list li { align-items: center; }
+#tr-list .tr-item { display: flex; gap: 6px; align-items: center; cursor: pointer; flex: 1; min-width: 0; }
+#tr-list .tr-route { display: block; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tr-list .tr-meta { display: block; font-size: 10px; color: var(--muted); }
+#tr-list .tr-focus { flex: none; padding: 2px 6px; min-height: 0; }
+.leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); }
+.leaflet-popup-tip { background: var(--panel); }
+/* Legenda da cor do nó no popup do mapa. */
+.map-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; font-size: 11px; }
+.map-legend-sel { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #00ff88; }
+.map-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid; flex: none; }
+
+/* ── mensagens ──────────────────────────────────────────────────────────── */
+.messages-layout { display: grid; grid-template-columns: 260px 1fr; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }
+.conv-list { overflow-y: auto; }
+.conv-list h2 {
+  font-size: 11px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--muted); margin: 4px 0 8px;
+}
+
+/* Conversas em caixas: canais a azul (#), mensagens directas a lilás (@). */
+#channel-list { --accent: var(--blue);   --accent-bg: #0a1f3d; --prefix: '# '; }
+#dm-list      { --accent: var(--purple); --accent-bg: #24183a; --prefix: '@ '; }
+#channel-list, #dm-list { gap: 6px; }
+#channel-list li[data-key], #dm-list li[data-key] {
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 8px;
+  padding: 10px 12px; font-weight: 600; align-items: center;
+}
+#channel-list li[data-key] > span:first-child::before,
+#dm-list li[data-key] > span:first-child::before { content: var(--prefix); color: var(--accent); }
+#channel-list li[data-key]:hover, #dm-list li[data-key]:hover { background: var(--input); border-color: var(--accent); }
+#channel-list li[data-key].active, #dm-list li[data-key].active {
+  background: var(--accent-bg); border-color: var(--accent); color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+#channel-list li[data-key]:has(.unread), #dm-list li[data-key]:has(.unread) { border-left-color: var(--red); }
+.conv-main { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.conv-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.conv-back { display: none; }
+.conv-view { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.composer { padding: 10px; border-top: 1px solid var(--border); }
+/* Responder: ↩ na mensagem, faixa por cima do campo de escrita, citação. */
+.msg .meta { align-items: center; }
+.msg .reply-btn {
+  margin: -4px -6px -4px auto; padding: 4px 8px; min-height: 0; border: none; background: none;
+  color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; opacity: .7;
+}
+.msg .reply-btn:hover { opacity: 1; color: var(--blue); }
+.reply-banner {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-top: 1px solid var(--border); border-left: 3px solid var(--blue);
+  background: var(--input); font-size: 12px; color: var(--muted);
+}
+.reply-banner[hidden] { display: none; }
+.reply-banner span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reply-banner b { color: var(--text); }
+.reply-quote {
+  margin: 2px 0 4px; padding: 3px 8px; border-left: 2px solid var(--blue);
+  background: rgba(88, 166, 255, .08); border-radius: 4px;
+  font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.composer input { flex: 1; }
+
+.msg { max-width: 75%; padding: 7px 10px; border-radius: 10px; background: var(--input); }
+.msg.out { align-self: flex-end; background: #0a3d1a; }
+/* Recebida via RF num canal: lilás discreto, para separar do MQTT. */
+.msg.rf { background: #221e2b; border-left: 2px solid rgba(188, 140, 255, .22); }
+.msg .meta { font-size: 10px; color: var(--muted); margin-bottom: 2px; display: flex; gap: 6px; }
+.msg .text { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.msg .status { font-size: 10px; margin-top: 2px; }
+.msg .status.ack { color: var(--green); }
+.msg .status.nak { color: var(--red); }
+.msg .status.sending { color: var(--muted); }
+.date-sep { text-align: center; color: var(--muted); font-size: 11px; margin: 6px 0; }
+
+/* ── navegação ──────────────────────────────────────────────────────────── */
+.nav-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.nav-layout .full { grid-column: 1 / -1; }
+.compass { width: 100%; max-width: 220px; display: block; margin: 0 auto; }
+.compass-sensor { display: grid; justify-items: center; gap: 6px; margin-top: 10px; }
+.compass-sensor[hidden] { display: none; }
+#btn-device-compass.active { border-color: var(--green); color: var(--green); }
+.compass-note { font-size: 11px; max-width: 320px; }
+.compass-note a { color: var(--blue); font-size: 14px; font-weight: 600; word-break: break-all; }
+.on-target { color: var(--green); font-weight: 700; }
+.field-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; }
+.field-list dt { color: var(--muted); }
+.field-list dd { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+
+/* ── métricas ───────────────────────────────────────────────────────────── */
+.metrics-layout { display: grid; grid-template-columns: 200px 1fr; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }
+.metrics-frame { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+
+/* ── configuração ───────────────────────────────────────────────────────── */
+.config-layout { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+.config-body { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.config-field { display: grid; grid-template-columns: 220px 1fr; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--input); font-size: 13px; }
+.config-field label { color: var(--text); font-size: 13px; }
+.config-field .value { font-family: ui-monospace, Menlo, monospace; color: var(--muted); }
+.channel-row { display: grid; grid-template-columns: 40px 1fr 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--input); font-size: 13px; align-items: center; }
+.config-title { font-size: 16px; }
+.config-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.config-hint { margin-bottom: 10px; }
+.head-save { background: var(--green); color: #0d1117; border-color: var(--green); font-weight: 600; }
+.head-save:disabled { background: var(--input); color: var(--muted); border-color: var(--border); opacity: 1; }
+.config-field .control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.config-field .control input:not([type=checkbox]), .config-field .control select { flex: 1 1 180px; max-width: 320px; min-width: 0; }
+.config-field .control textarea { width: 100%; max-width: 420px; background: var(--input); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font: inherit; resize: vertical; }
+.config-field .note { flex-basis: 100%; color: var(--orange); font-size: 11px; font-style: italic; }
+.range-hint { font-size: 11px; color: var(--muted); }
+.range-hint.over { color: var(--red); }
+.canned { display: grid; gap: 4px; width: 100%; }
+/* Campo alterado e ainda não gravado: barra laranja à esquerda. */
+.config-field.dirty { box-shadow: inset 3px 0 0 var(--orange); padding-left: 8px; background: rgba(240, 136, 62, .06); }
+.plain-list li .unread.pending { background: var(--orange); }
+#config-banner { margin-bottom: 14px; }
+
+/* Interruptor (bool) */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; background: var(--input); border: 1px solid var(--border); border-radius: 22px; cursor: pointer; transition: background .15s; }
+.switch span::before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px; background: var(--muted); border-radius: 50%; transition: transform .15s, background .15s; }
+.switch input:checked + span { background: #0a3d1a; border-color: var(--green); }
+.switch input:checked + span::before { transform: translateX(18px); background: var(--green); }
+.switch input:focus-visible + span { outline: 2px solid var(--blue); }
+.switch input:disabled + span { opacity: .5; cursor: default; }
+
+/* Barra de gravação: fica colada ao fundo enquanto há alterações. */
+.save-bar {
+  position: sticky; bottom: 0; margin: 14px -14px -14px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #2a1c0c; border-top: 1px solid var(--orange); border-radius: 0 0 8px 8px;
+  color: var(--orange); font-size: 13px; z-index: 2;
+}
+.save-bar .primary { background: var(--green); color: #0d1117; border-color: var(--green); font-weight: 600; }
+
+/* Editor de canais */
+.channel-card { border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+.channel-card.role-primary { border-left-color: var(--green); }
+.channel-card.role-disabled { border-left-color: var(--muted); opacity: .75; }
+.channel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.channel-card .config-field { grid-template-columns: 160px 1fr; }
+.psk-control input { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.psk-control select { flex: 0 0 auto !important; }
+.danger { color: var(--red) !important; }
+.add-channel { width: 100%; border-style: dashed; color: var(--blue); }
+
+/* ── gaveta de consola ──────────────────────────────────────────────────── */
+.drawer {
+  position: fixed; right: 0; bottom: 0; width: min(460px, 100vw); height: 50vh;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px 0 0 0;
+  z-index: 40; display: flex; flex-direction: column; box-shadow: -4px 0 20px rgba(0,0,0,.4);
+}
+.drawer-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+}
+#console-log { flex: 1; margin: 0; border: none; border-radius: 0; }
+
+.log {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px; overflow: auto; font-size: 11px; white-space: pre-wrap; word-break: break-word;
+}
+
+/* ── toasts ─────────────────────────────────────────────────────────────── */
+.toasts {
+  position: fixed; top: 12px; right: 12px; z-index: 60;
+  display: grid; gap: 8px; max-width: min(360px, 90vw);
+}
+.toast {
+  background: var(--panel); border: 1px solid var(--red); color: var(--text);
+  padding: 10px 14px; border-radius: 6px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+
+/* ── layout móvel ───────────────────────────────────────────────────────
+   Mesmo limite que MOBILE_QUERY em utils.js. Conteúdo largo (tabelas, logs)
+   rola dentro do próprio contentor; o body nunca rola na horizontal.
+   As abas de altura fixa usam --chrome-h (cabeçalho + abas, medido pelo
+   app.js) e 100dvh, que no Safari iOS exclui a barra de endereço. */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  :root { --pane-h: calc(100dvh - var(--chrome-h, 110px) - 20px - env(safe-area-inset-bottom)); }
+
+  body { -webkit-text-size-adjust: 100%; }
+
+  /* O Safari iOS faz zoom a qualquer campo com letra abaixo de 16px. */
+  input, select, textarea { font-size: 16px; }
+  button { min-height: 36px; }
+  .small { min-height: 28px; padding: 4px 10px; }
+
+  /* Cabeçalho compacto: marca + estado + botões numa linha, pesquisa na
+     linha de baixo a toda a largura. Estatísticas de pacotes e nome do nó
+     já aparecem noutras abas. */
+  header {
+    gap: 6px 8px; padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  #packet-stats, #node-label { display: none; }
+  /* Primeira linha: marca, ligação e menu. Segunda: pesquisa a toda a largura. */
+  .search { order: 10; flex: 1 1 100%; width: auto; max-width: none; }
+  .pill.connect { padding: 4px 10px; }
+
+  #tabs { padding: 0 4px; scrollbar-width: none; }
+  #tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 10px; }
+
+  main { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+
+  .stats { gap: 14px; }
+  .stats b { font-size: 18px; }
+
+  td, th { padding: 7px 6px; }
+
+  /* Mapa: ocupa o ecrã, o painel lateral fica por baixo. */
+  /* Mapa: ocupa a área toda; tema e traceroutes numa folha que sobe por
+     cima da metade de baixo, para o mapa continuar visível por trás. */
+  .map-layout { display: block; position: relative; height: var(--pane-h); min-height: 300px; }
+  #map-canvas { height: 100%; }
+  .map-side-toggle {
+    display: flex; align-items: center; gap: 4px;
+    position: absolute; top: 10px; right: 10px; z-index: 5;
+    font-size: 20px; padding: 6px 10px; min-height: 42px; border-radius: 10px;
+    background: var(--panel); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.45);
+  }
+  .tr-count {
+    background: var(--green); color: #000; border-radius: 9px; font: 700 11px system-ui, sans-serif;
+    padding: 1px 6px; min-width: 18px; text-align: center;
+  }
+  .map-side {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; max-height: 48%;
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    border: 1px solid var(--border); border-radius: 14px 14px 8px 8px;
+    padding: 0 12px 10px; box-shadow: 0 -4px 16px rgba(0,0,0,.5);
+    transform: translateY(105%); transition: transform .22s ease; visibility: hidden;
+  }
+  .map-layout.side-open .map-side { transform: none; visibility: visible; }
+  .map-layout.side-open .map-side-toggle { display: none; }
+  .map-side-head {
+    display: flex; justify-content: center; position: sticky; top: 0; z-index: 1;
+    padding: 6px 0 2px; background: inherit;
+  }
+  .map-side-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; }
+  .map-side-close { position: absolute; right: 0; top: 2px; font-size: 16px; }
+  .map-side h2 { font-size: 12px; margin: 4px 0 6px; }
+  .map-side #map-themes { margin-bottom: 10px; }
+  #tr-list { margin-bottom: 0; }
+  #tr-list li { padding: 9px 6px; }
+  #tr-list .tr-route { font-size: 13px; }
+  #tr-list .tr-focus { font-size: 17px; padding: 4px 8px; min-height: 34px; }
+
+  /* Mensagens: um painel de cada vez — lista ou conversa (.conv-open). */
+  .messages-layout { grid-template-columns: 1fr; height: var(--pane-h); min-height: 300px; }
+  .messages-layout .conv-main { display: none; }
+  .messages-layout.conv-open .conv-list { display: none; }
+  .messages-layout.conv-open .conv-main { display: flex; }
+  .conv-back { display: inline-block; }
+  .conv-list .plain-list li { padding: 11px 10px; font-size: 15px; }
+  .msg { max-width: 88%; }
+
+  .nav-layout { grid-template-columns: 1fr; }
+
+  /* Métricas: lista de secções em faixa horizontal, gráfico por baixo. */
+  .metrics-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: var(--pane-h); min-height: 360px; gap: 8px; }
+  .metrics-layout aside { display: flex; gap: 8px; align-items: center; overflow-x: auto; }
+  .metrics-layout aside .plain-list { display: flex; margin: 0; }
+  .metrics-layout aside .plain-list li { white-space: nowrap; }
+  .metrics-layout aside button { flex: none; }
+
+  .config-layout { grid-template-columns: 1fr; }
+  /* Secções de configuração: faixa horizontal com scroll, como nas métricas. */
+  .config-layout { gap: 8px; }
+  .config-layout aside { overflow-x: auto; }
+  .config-layout aside .plain-list { display: flex; flex-wrap: nowrap; gap: 4px; margin: 0; }
+  .config-layout aside .plain-list li { white-space: nowrap; flex: none; }
+  .config-field, .channel-card .config-field { grid-template-columns: 1fr; gap: 4px; }
+  .config-field .control input:not([type=checkbox]), .config-field .control select { max-width: none; }
+  .save-bar { margin: 10px -14px -14px; padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .save-bar .spacer { display: none; }
+  .save-bar > span:first-child { flex-basis: 100%; }
+  .save-bar button { flex: 1; }
+  .config-field .value { word-break: break-all; }
+
+  .drawer { width: 100vw; height: 60dvh; border-radius: 8px 8px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .card { padding: 20px; }
+  .modal-card { max-height: 85dvh; }
+  .toasts { top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; max-width: none; }
+}
+
+/* ── modal genérico (showModal) ────────────────────────────────────────── */
+.modal-card { width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; }
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 4px;
+}
+.modal-body { overflow: auto; font-size: 12px; }
+.modal-body pre { white-space: pre-wrap; word-break: break-word; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.modal-actions .primary { border-color: var(--blue); color: var(--blue); }
+.modal-text { white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
+/* Resultado do traceroute: uma linha por hop, em monoespaçado. */
+.tr-result { font-size: 12px; line-height: 1.6; white-space: pre; overflow-x: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.tr-title { color: var(--green); font-weight: 600; margin-bottom: 4px; }
+.tr-legend { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+/* Aviso com contagem decrescente (traceroute a aguardar resposta). */
+.toast.info { border-color: var(--blue); }
+
+/* ── tema escuro do mapa: filtro CSS sobre o OpenStreetMap (ver map.js) ─── */
+.theme-dark-filter .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+/* Os marcadores e popups ficam fora da tile-pane, por isso não são afectados
+   pelo filtro — continuam com as cores reais de estado. */
+
+/* Botão ⟳ ao lado da lista de portas serial: visível e com área de toque. */
+#c-serial-refresh {
+  border: 1px solid var(--border, #30363d);
+  font-size: 1.15em; min-width: 40px; padding: 6px 10px;
+}
+#c-serial-refresh:disabled { opacity: .5; }
+
+/* ── lista de nós ─────────────────────────────────────────────────────────── */
+/* Distintivo com o nome curto, numa cor fixa por nó (nodeHue). */
+.node-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: 38px; height: 22px; padding: 0 5px; border-radius: 6px;
+  background: hsl(var(--hue) 45% 22%); color: hsl(var(--hue) 80% 80%);
+  border: 1px solid hsl(var(--hue) 45% 34%);
+  font: 600 11px/1 ui-monospace, Menlo, monospace; letter-spacing: .02em;
+}
+.tag {
+  display: inline-block; padding: 1px 6px; border-radius: 9px; font-size: 10px;
+  background: rgba(88, 166, 255, .12); color: var(--blue);
+}
+/* Ponto de estado do último contacto: <15 min, <2 h, mais antigo. */
+.seen { white-space: nowrap; }
+.seen::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 5px; vertical-align: 1px; background: #6e7681;
+}
+.seen.fresh::before { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.seen.recent::before { background: var(--orange); }
+.seen.stale { color: var(--muted); }
+.snr.ok { color: var(--green); }
+.snr.warn { color: var(--orange); }
+.snr.bad { color: var(--red); }
+
+#nodes-table td { vertical-align: middle; }
+#nodes-table tbody tr { cursor: pointer; }
+.node-name { display: flex; align-items: center; gap: 8px; }
+.node-name span:not(.node-badge):not(.tag) { font-weight: 600; }
+.node-actions { white-space: nowrap; padding: 2px 4px; }
+.node-act {
+  padding: 3px 5px; min-height: 0; border: none; background: none;
+  font-size: 14px; line-height: 1; border-radius: 6px;
+}
+.node-act:hover:not(:disabled) { background: var(--input); }
+.node-act:disabled { opacity: .2; }
+
+.nodes-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.nodes-toolbar .hint { margin: 0 0 10px; }
+.view-seg { flex: none; min-width: 200px; margin: -4px 0 10px; }
+/* Cartões: uma coluna no telemóvel, grelha no desktop. */
+.node-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+.node-cards[hidden], .nodes-table-wrap[hidden] { display: none; }
+.node-card:hover:not(.is-selected) { border-color: #484f58; }
+.node-cards .node-card { display: flex; flex-direction: column; }
+.nc-extra {
+  margin-top: auto; padding-top: 6px; border-top: 1px solid var(--input);
+  font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.node-card {
+  padding: 10px 10px 8px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel); cursor: pointer;
+}
+.node-card.is-local { border-color: rgba(240, 136, 62, .5); background: #1a1308; color: inherit; }
+.node-card.is-fav { border-color: rgba(227, 179, 65, .45); background: #1d1a0f; }
+.node-card.is-selected { border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset; }
+.nc-head { display: flex; align-items: center; gap: 10px; }
+.nc-head .node-badge { height: 30px; min-width: 46px; font-size: 12px; border-radius: 8px; }
+.nc-title { display: grid; min-width: 0; }
+.nc-title b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-title span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 8px 0 6px; flex-wrap: wrap; }
+.nc-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--text); }
+.nc-actions { display: flex; gap: 2px; margin-left: auto; }
+.nc-actions .node-act { font-size: 17px; padding: 6px 6px; min-height: 34px; min-width: 32px; }
+.nc-fav { margin-left: auto; font-size: 20px; padding: 4px 6px; min-height: 34px; }
+
+/* ── navegação: nós com GPS ───────────────────────────────────────────────── */
+.count-badge { font-size: 11px; color: var(--muted); font-weight: 400; }
+.gps-list { list-style: none; margin: 0; padding: 0; }
+.gps-list li {
+  display: flex; align-items: center; gap: 10px; padding: 8px;
+  border-bottom: 1px solid var(--input); cursor: pointer; border-radius: 8px;
+}
+.gps-list li:hover { background: var(--input); }
+.gps-list li.is-selected { background: #16301c; box-shadow: inset 3px 0 0 var(--green); }
+.gps-list .gps-empty { cursor: default; }
+.gps-main { flex: 1; min-width: 0; }
+.gps-main b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gps-details { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.gps-dir { display: grid; justify-items: center; gap: 1px; font-size: 10px; color: var(--muted); flex: none; width: 52px; }
+.gps-arrow { width: 20px; height: 20px; fill: var(--blue); transition: transform .3s; }
+.gps-list li.is-selected .gps-arrow { fill: var(--green); }
+.gps-dist { flex: none; min-width: 64px; text-align: right; font: 700 15px ui-monospace, Menlo, monospace; }
+.gps-list .gps-map { flex: none; font-size: 17px; padding: 6px; min-height: 34px; min-width: 34px; }
+
+/* Telemóvel: cartões em vez da tabela de nós (depois das regras base). */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .nodes-table-wrap { display: none !important; }
+  .node-cards { display: flex !important; flex-direction: column; gap: 8px; }
+  .view-seg { display: none; }
+  .nc-extra { display: none; }
+  .gps-list li { padding: 10px 6px; gap: 8px; }
+  .gps-dist { min-width: 58px; font-size: 14px; }
+}

@@ -1,9 +1,10 @@
 """
 tabs/tab_metrics.py — MetricsTab: aba de métricas em tempo real.
 
-Orquestra a UI (QListWidget + QWebEngineView) e delega:
-  - Ingestão e cálculo de dados → MetricsDataMixin  (metrics_data.py)
-  - Geração de HTML/JS          → MetricsRenderMixin (metrics_render.py)
+Orquestra a UI (QListWidget + QWebEngineView) e delega tudo o resto a
+core.metrics.MeshMetrics, que junta a ingestão de dados (metrics_data.py) à
+geração de HTML/JS (metrics_render.py) sem depender do Qt. O servidor web
+herda da mesma classe, por isso as 11 secções existem uma só vez.
 """
 import json
 from i18n import tr
@@ -20,11 +21,10 @@ from constants import (
     logger, DARK_BG, PANEL_BG, BORDER_COLOR, ACCENT_GREEN, ACCENT_BLUE,
     ACCENT_ORANGE, ACCENT_RED, TEXT_PRIMARY, TEXT_MUTED
 )
-from tabs.metrics_data   import MetricsDataMixin
-from tabs.metrics_render import MetricsRenderMixin
+from core.metrics import LOCAL_NODE_SIGNATURE_FIELDS, SECTIONS, WAITING_SECTIONS, MeshMetrics
 
 
-class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
+class MetricsTab(MeshMetrics, QWidget):
     """
     Aba de métricas em tempo real da rede Meshtastic.
     Recolhe dados de todos os pacotes recebidos e apresenta gráficos
@@ -45,28 +45,11 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
 
     @classmethod
     def get_sections(cls):
-        """Returns sections with translated labels."""
-        return [
-            (tr("📊 Visão Geral"),      "overview"),
-            (tr("🏠 Nó Local"),         "local_node"),
-            (tr("📡 Canal & Airtime"),  "channel"),
-            (tr("📶 Qualidade RF"),     "rf"),
-            (tr("📦 Tráfego"),          "traffic"),
-            (tr("🔋 Nós & Bateria"),    "nodes"),
-            (tr("✅ Fiabilidade"),      "reliability"),
-            (tr("⏱ Latência"),         "latency"),
-            (tr("🔗 Vizinhança"),       "neighbors"),
-            (tr("📏 Alcance & Links"),  "range_links"),
-            (tr("⏰ Intervalos"),       "intervals"),
-        ]
-
-    # Limites do canal (documentação oficial Meshtastic)
-    CH_UTIL_OK    = 25.0   # abaixo = verde
-    CH_UTIL_WARN  = 50.0   # abaixo = laranja; acima = vermelho
+        """Secções com as etiquetas traduzidas, na ordem de apresentação."""
+        return [(tr(label), key) for key, label in SECTIONS]
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._reset_data()
+        super().__init__(parent)   # MeshMetrics faz o _reset_data()
         self._page_ready  = False
         self._filter_text = ""    # texto do campo de busca global
         # _refresh_timer: dispara runJavaScript a cada 5s — corre SEMPRE,
@@ -205,19 +188,9 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
             self._local_node_sig = None   # força re-render da secção local_node
             self._render_section(self._section_list.currentRow())
 
-    def _section_has_data(self, key: str) -> bool:
-        """Indica se a secção `key` já tem dados suficientes para sair do ecrã de espera."""
-        if key == 'intervals':   return bool(self._data_intervals()['rows'])
-        if key == 'neighbors':   return bool(self._nb_links)
-        if key == 'range_links': return bool(self._data_range_links()['rows'])
-        if key == 'rf':          return bool(self._snr_values or self._hops_values)
-        if key == 'channel':     return bool(self._ch_util_active() or self._air_tx_active() or self._ch_util_ts)
-        if key == 'nodes':       return bool(self._battery or self._packets)
-        return True
-
-    # Secções que mostram ecrã de espera enquanto não há dados.
-    # local_node é gerido exclusivamente pelo hash guard em _refresh_current.
-    _WAITING_SECTIONS = {'intervals', 'neighbors', 'range_links', 'rf', 'channel', 'nodes'}
+    # _section_has_data e as secções com ecrã de espera vêm de core.metrics.
+    _section_has_data = MeshMetrics.has_data
+    _WAITING_SECTIONS = WAITING_SECTIONS
 
     def _refresh_current(self):
         """Actualiza os dados da secção activa.
@@ -255,10 +228,9 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
                 sig = '_waiting'
             else:
                 d = self._data_local_node()
-                sig = _hl.md5(str((
-                    d.get('ch_util'), d.get('air_tx'), d.get('dc_est'),
-                    d.get('battery'), d.get('msgs_sent'), d.get('msgs_acked'),
-                    d.get('snr_rx_avg'), d.get('delivery'),
+                # A mesma lista que o servidor usa (core.metrics).
+                sig = _hl.md5(str(tuple(
+                    d.get(f) for f in LOCAL_NODE_SIGNATURE_FIELDS
                 )).encode()).hexdigest()
             last = getattr(self, '_local_node_sig', None)
             if sig != last:
@@ -267,22 +239,11 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
                 self._chart_view.setHtml(self._html_local_node())
             return
 
-        data_fn = {
-            'overview':    self._data_overview,
-            'channel':     self._data_channel,
-            'rf':          self._data_rf,
-            'traffic':     self._data_traffic,
-            'nodes':       self._data_nodes,
-            'reliability': self._data_reliability,
-            'latency':     self._data_latency,
-            'neighbors':   self._data_neighbors,
-            'range_links': self._data_range_links,
-            'intervals':   self._data_intervals,
-        }.get(key)
-        if data_fn is None:
+        data = self.data_for(key)
+        if not data:
             return
         try:
-            payload = json.dumps(data_fn(), ensure_ascii=False)
+            payload = json.dumps(data, ensure_ascii=False)
             self._chart_view.page().runJavaScript(
                 f"if(window._metricsUpdateData) window._metricsUpdateData({payload});"
             )
@@ -317,8 +278,7 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
 
     def _apply_filter_to_js(self):
         """Envia o filtro actual ao JS da página para ocultar/mostrar linhas."""
-        import json as _json
-        ft = _json.dumps(self._filter_text)
+        ft = json.dumps(self._filter_text)
         self._chart_view.page().runJavaScript(
             f"if(window._metricsFilterTable) window._metricsFilterTable({ft});"
         )
@@ -335,18 +295,9 @@ class MetricsTab(MetricsDataMixin, MetricsRenderMixin, QWidget):
             self._update_refresh_label()
             return
         # Não parar _refresh_timer — corre sempre e é protegido pelo JS
-        html_fn = {
-            'overview':    self._html_overview,
-            'local_node':  self._html_local_node,
-            'channel':     self._html_channel,
-            'rf':          self._html_rf,
-            'traffic':     self._html_traffic,
-            'nodes':       self._html_nodes,
-            'reliability': self._html_reliability,
-            'latency':     self._html_latency,
-            'neighbors':   self._html_neighbors,
-            'range_links': self._html_range_links,
-            'intervals':   self._html_intervals,
-        }.get(key, self._html_overview)
-        self._chart_view.setHtml(html_fn())
+        try:
+            html = self.html_for(key)
+        except KeyError:
+            html = self.html_for('overview')
+        self._chart_view.setHtml(html)
         self._update_refresh_label()

@@ -1,12 +1,18 @@
 """
-models.py — Modelos de dados: FirmwareFavorites, NodeTableModel,
-NodeFilterProxyModel e a função auxiliar _safe_update.
+models.py — Modelos de dados Qt: NodeTableModel e NodeFilterProxyModel.
+
+FirmwareFavorites e _safe_update vivem agora em core/ e são reexportados aqui
+para quem os importava deste módulo. O servidor web usa-os directamente do
+core, sem passar pelo PyQt5.
 """
 import os
 import logging
 from typing import Optional, Dict, Any, Set, List
 from datetime import datetime, timedelta
 from i18n import tr
+
+from core.favorites import FirmwareFavorites
+from core.node_store import _safe_update
 
 from PyQt5.QtCore import (
     Qt, QAbstractTableModel, QSortFilterProxyModel,
@@ -38,127 +44,7 @@ _QC_BG_SEL  = QColor("#1a3a1a")
 
 
 
-class FirmwareFavorites:
-    """
-    Gestão de favoritos directamente no firmware do nó local.
-    Lê isFavorite do nodesByNum (preenchido pelo daemon ao conectar).
-    Escreve via localNode.setFavorite() / removeFavorite() (AdminMessage).
-    Não usa ficheiro local — a fonte de verdade é sempre o firmware.
-    """
-
-    def __init__(self):
-        self._iface = None          # definido em set_interface() após ligação
-        self._favorites: Set[str] = set()   # cache em memória (id_string)
-
-    def set_interface(self, iface):
-        """Chamado após ligação — carrega favoritos do nodesByNum do firmware."""
-        self._iface = iface
-        self._favorites = set()
-        if iface is None:
-            return
-        try:
-            nodes = getattr(iface, 'nodesByNum', {}) or {}
-            for num, node in nodes.items():
-                if node.get('isFavorite'):
-                    uid = node.get('user', {}).get('id', '')
-                    if uid:
-                        self._favorites.add(uid)
-        except Exception as e:
-            logger.warning(f"FirmwareFavorites.load: {e}")
-
-    def is_favorite(self, node_id: str) -> bool:
-        return node_id in self._favorites
-
-    def toggle(self, node_id: str, node_data: Optional[Dict] = None) -> bool:
-        """Alterna favorito no firmware. Retorna True se agora é favorito."""
-        if node_id in self._favorites:
-            self._favorites.discard(node_id)
-            self._send_to_firmware(node_id, favorite=False)
-            return False
-        else:
-            self._favorites.add(node_id)
-            self._send_to_firmware(node_id, favorite=True)
-            return True
-
-    def _send_to_firmware(self, node_id: str, favorite: bool):
-        """Envia setFavorite ou removeFavorite ao nó local via AdminMessage."""
-        if not self._iface:
-            logger.warning("FirmwareFavorites: no interface — could not persist")
-            return
-        try:
-            local = self._iface.localNode
-            if favorite:
-                local.setFavorite(node_id)
-                logger.info(f"Favourite added in firmware: {node_id}")
-            else:
-                local.removeFavorite(node_id)
-                logger.info(f"Favourite removed from firmware: {node_id}")
-        except Exception as e:
-            logger.warning(f"FirmwareFavorites._send_to_firmware: {e}")
-
-    def sync_from_firmware(self):
-        """Re-lê os favoritos do firmware (útil após reconexão)."""
-        self.set_interface(self._iface)
-
-    # Compatibilidade com código antigo que chamava get_all_nodes_data()
-    def get_all(self) -> Set[str]:
-        return set(self._favorites)
-
-    def get_all_nodes_data(self) -> list:
-        """Retorna lista vazia — já não injectamos nós do ficheiro local."""
-        return []
-
-    def update_node_data(self, node_id: str, node_data: Dict):
-        """No-op — não guardamos dados localmente."""
-        pass
-
-
 _FAVORITES = FirmwareFavorites()
-
-def _safe_update(target: dict, source: dict) -> None:
-    """
-    Aplica source a target com as seguintes regras:
-    - last_heard: só actualiza se o novo valor é um datetime mais recente
-      que o existente; nunca sobrescreve datetime com None, 0 ou outro tipo
-    - Campos numéricos (snr, hops_away, battery_level, latitude, longitude,
-      altitude): só actualiza se o novo valor não é None
-    - Campos string (long_name, short_name, hw_model, public_key): só
-      actualiza se o novo valor é não-vazio
-    - Campos bool e outros campos simples: actualiza sempre
-    - Campos técnicos internos (id_string, last_packet, _selected_highlight):
-      actualiza sempre
-
-    Esta função resolve o problema de _emit_node / _on_nodes_batch
-    sobrescrever last_heard válido com lastHeard=0 do NodeDB, e de
-    dict.update() apagar campos reais com None de actualizações parciais.
-    """
-    # Campos que nunca devem ser sobrescritos por None ou valor falsy
-    _no_overwrite_none = {
-        'snr', 'hops_away', 'battery_level',
-        'latitude', 'longitude', 'altitude',
-        'voltage', 'uptime_seconds', 'channel_utilization', 'air_util_tx',
-    }
-    # Campos string que não devem ser sobrescritos por strings vazias
-    _no_overwrite_empty_str = {'long_name', 'short_name', 'hw_model', 'public_key'}
-
-    for key, val in source.items():
-        if key == 'last_heard':
-            # Só actualiza last_heard se o novo valor é um datetime
-            # e é mais recente que o existente (ou não há valor existente)
-            existing = target.get('last_heard')
-            if isinstance(val, datetime):
-                if not isinstance(existing, datetime) or val > existing:
-                    target['last_heard'] = val
-            # Se val não é datetime (ex: 0, None, int) — ignora completamente
-        elif key in _no_overwrite_none:
-            if val is not None:
-                target[key] = val
-        elif key in _no_overwrite_empty_str:
-            if val:  # ignora strings vazias
-                target[key] = val
-        else:
-            target[key] = val
-
 
 # ---------------------------------------------------------------------------
 # Modelo de dados — tabela de nós

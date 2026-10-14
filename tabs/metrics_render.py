@@ -68,6 +68,29 @@ class MetricsRenderMixin:
   .tag-gray {{ background: #21262d; color: #8b949e; }}
   .no-data {{ color: #8b949e; text-align: center; padding: 40px 0; font-size: 13px; }}
   .updated {{ color: #8b949e; font-size: 10px; text-align: right; margin-top: 12px; }}
+  /* Ecrã estreito (interface web no telemóvel). O desktop nunca chega a esta
+     largura, por isso não é afectado. KPIs em duas colunas, gráficos e
+     tabelas a toda a largura, e os valores grandes mais contidos. */
+  @media (max-width: 600px) {{
+    body {{ padding: 10px; }}
+    h2 {{ font-size: 15px; }}
+    .subtitle {{ margin-bottom: 12px; }}
+    .grid, .grid-3 {{ grid-template-columns: 1fr 1fr; gap: 8px; }}
+    .grid-3 {{ margin-bottom: 8px; }}
+    .grid {{ margin-bottom: 8px; }}
+    .grid-3 > :last-child:nth-child(odd), .grid > :last-child:nth-child(odd) {{ grid-column: 1 / -1; }}
+    .grid > .card:has(canvas, table),
+    .grid-3 > .card:has(canvas, table) {{ grid-column: 1 / -1; }}
+    .card {{ padding: 10px; min-width: 0; overflow-x: auto; }}
+    .card[style*="margin-top"] {{ margin-top: 8px !important; }}
+    .card h3 {{ font-size: 10px; margin-bottom: 4px; }}
+    .kpi, .kpi[style] {{ font-size: 22px !important; line-height: 1.15; min-width: 0 !important; }}
+    .kpi-sub {{ font-size: 10px; }}
+    .chart-wrap {{ height: 180px; }}
+    .chart-wrap-lg {{ height: 220px; }}
+    table {{ font-size: 11px; }}
+    th, td {{ padding: 5px 4px; }}
+  }}
 </style>
 </head><body>
 <h2>{title}</h2>
@@ -90,9 +113,8 @@ class MetricsRenderMixin:
         ch_util_avg = round(sum(self._ch_util_active().values()) / len(self._ch_util_active()), 1) if self._ch_util_active() else None
         air_avg     = round(sum(self._air_tx_active().values()) / len(self._air_tx_active()), 1) if self._air_tx_active() else None
 
-        # Taxa de entrega
-        total_r = self._msgs_acked + self._msgs_naked
-        delivery = round(self._msgs_acked / total_r * 100, 1) if total_r > 0 else None
+        # Taxa de entrega (só DMs: as mensagens de canal nunca têm ACK real)
+        delivery = self._delivery()
 
         def kpi(val, unit, label, color="", kid="", note=""):
             v = f"{val}{unit}" if val is not None else "—"
@@ -128,7 +150,7 @@ class MetricsRenderMixin:
         ) or f"<tr><td colspan='5' class='no-data'>{tr('Sem dados ainda')}</td></tr>"
 
         body = f"""
-<div class="subtitle">{tr('Resumo da sessão · Actualizado: {hora}', hora=self._now_str())}</div>
+<div class="subtitle">{tr('Resumo da sessão')}</div>
 <div class="grid-3">
   {kpi(total_pkts, "", tr("Total Pacotes"), "blue", "ov-pkts")}
   {kpi(n_active, " " + tr("nós"), tr("Nós Activos (2h)"), "green", "ov-active")}
@@ -137,7 +159,7 @@ class MetricsRenderMixin:
 <div class="grid-3">
   {kpi(snr_avg, " dB", tr("SNR Médio"), "green" if snr_avg and snr_avg >= 0 else "orange", "ov-snr")}
   {kpi(hops_avg, " hops", tr("Hops Médio"), "", "ov-hops")}
-  {kpi(delivery, "%", tr("Taxa Entrega"), "green" if delivery and delivery >= 80 else "orange", "ov-delivery", tr("Só mensagens enviadas pelo nó local"))}
+  {kpi(delivery, "%", tr("Taxa Entrega"), "green" if delivery and delivery >= 80 else "orange", "ov-delivery", tr("DMs enviadas pelo nó local"))}
 </div>
 <div class="grid">
   {ch_kpi(ch_util_avg)}
@@ -148,7 +170,7 @@ class MetricsRenderMixin:
   <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
   <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Pacotes")}</th><th>Ch. Util.</th><th>{tr("Bateria")}</th></tr><tbody id="ov-node-tbody" data-filterable="1">{rows}</tbody></table>
 </div>
-<div class="updated" id="ov-updated">{tr('Sessão iniciada')} · {datetime.fromtimestamp(self._start_time).strftime('%H:%M:%S %d/%m/%Y')} · {tr('Actualizado:')} {self._now_str()}</div>
+<div class="updated" id="ov-updated">{tr('Sessão iniciada')} · {datetime.fromtimestamp(self._start_time).strftime('%H:%M:%S %d/%m/%Y')}</div>
 <script>
 window._metricsUpdateData = function(d) {{
   function kpiColor(val, thresholds) {{
@@ -175,7 +197,6 @@ window._metricsUpdateData = function(d) {{
   setKpiClass('ov-chutil', d.ch_avg===null?'':d.ch_avg<25?'green':d.ch_avg<50?'orange':'red');
   setKpi('ov-air', d.air_avg, '%');
   setKpiClass('ov-air', d.air_avg!==null&&d.air_avg<10?'green':'orange');
-  var e=document.getElementById('ov-updated'); if(e) e.textContent=''+d.now_label+': '+d.now;
   var tb=document.getElementById('ov-node-tbody');
   if(tb && d.table_rows && d.table_rows.length) {{
     var h='';
@@ -222,12 +243,13 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
             body = f'<div class="no-data">{tr("⏳ Aguardando dados de telemetria (TELEMETRY_APP)...")}<br><br>{tr("Os nós devem ter o módulo de telemetria activado.")}</div>'
             return self._base_html(tr("📡 Canal & Airtime"), body)
 
-        # Hourly Duty Cycle estimado: airUtilTx (10 min) × 6 = estimativa 1h
-        # airUtilTx é uma métrica POR NÓ (tx daquele nó).
-        # channelUtilization é da REDE (rx+tx de todos os dispositivos no canal).
-        # Mostramos o pior nó (mais alto duty cycle) como indicador de risco.
+        # Duty cycle horário = airUtilTx: o protobuf define-o como a % de
+        # airtime de TX na última hora (não 10 min — multiplicar por 6
+        # sobrestimava-o seis vezes). É uma métrica POR NÓ (TX daquele nó);
+        # channelUtilization é da REDE (RX+TX de todos no canal).
+        # Mostramos o pior nó como indicador de risco.
         # Fonte: ETSI EN300.220 — EU_433/EU_868 limite 10%/hora.
-        duty_per_node = {nid: round(min(air * 6, 100.0), 2)
+        duty_per_node = {nid: round(min(air, 100.0), 2)
                          for nid, air in self._air_tx_active().items()}
 
         # Nó com maior duty cycle (pior caso)
@@ -240,7 +262,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         def duty_status(dc):
             if dc >= self.DUTY_CYCLE_LIMIT_EU: return "red",    tr("🚨 LIMITE EXCEDIDO")
             if dc >= self.DUTY_CYCLE_WARN_EU:  return "orange", tr("⚠ Próximo do limite")
-            return "green", tr("✅ Óptimo (<25%)")
+            return "green", tr("lbl_dc_optimal")
 
         # Tabela por nó — usa apenas nós com TTL válido
         ch_active  = self._ch_util_active()
@@ -249,23 +271,21 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         all_nids = sorted(set(list(ch_active.keys()) + list(air_active.keys())))
         for nid in all_nids:
             ch  = ch_active.get(nid, 0)
-            air = air_active.get(nid, 0)
-            dc  = duty_per_node.get(nid, round(min(air * 6, 100.0), 2))
+            dc  = duty_per_node.get(nid, 0)
             ch_tag  = "green" if ch  < self.CH_UTIL_OK  else ("orange" if ch  < self.CH_UTIL_WARN else "red")
-            air_tag = "green" if air < 10               else ("orange" if air < 25               else "red")
             dc_color, dc_label = duty_status(dc)
             dc_pct = min(int(dc / self.DUTY_CYCLE_LIMIT_EU * 100), 100)
             bar_c  = {"green": "#39d353", "orange": "#f0883e", "red": "#f85149"}[dc_color]
             worst_mark = " 🔺" if nid == worst_nid and worst_dc and worst_dc >= self.DUTY_CYCLE_WARN_EU else ""
             display_name = self._name(nid)
+            # As mesmas 5 colunas que o cabeçalho e que a actualização em JS.
             rows += (
-                f"<tr><td>{display_name}{worst_mark}</td>"
+                f"<tr><td>{nid}</td><td>{display_name}{worst_mark}</td>"
                 f"<td><span class='tag tag-{ch_tag}'>{ch:.1f}%</span></td>"
-                f"<td><span class='tag tag-{air_tag}'>{air:.2f}%</span></td>"
                 f"<td><span class='tag tag-{dc_color}'>{dc:.2f}%</span>"
                 f"  <div class='bar-bg' style='margin-top:3px'>"
                 f"  <div class='bar-fill' style='width:{dc_pct}%;background:{bar_c}'></div></div></td>"
-                f"<td style='font-size:11px'>{dc_label}</td></tr>"
+                f"<td><span class='tag tag-{dc_color}'>{dc_label}</span></td></tr>"
             )
         if not rows:
             rows = f"<tr><td colspan='5' class='no-data'>{tr('Sem dados')}</td></tr>"
@@ -301,7 +321,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
                 f'<div id="dc-avg-val" class="kpi {dc_color_w}">{worst_dc}%</div>'
                 f'<div class="bar-wrap"><div class="bar-bg">'
                 f'<div class="bar-fill" style="width:{dc_pct_w}%;background:{bar_c_w}"></div></div></div>'
-                f'<div class="kpi-sub">{tr("Métrica por nó (TX daquele nó) · airUtilTx×6 · Limite EU: 10%/hora · {dc_label_w}", dc_label_w=dc_label_w)}</div></div>'
+                f'<div class="kpi-sub">{tr("Métrica por nó (TX daquele nó na última hora) · Limite EU: 10%/hora · {dc_label_w}", dc_label_w=dc_label_w)}</div></div>'
             )
         else:
             duty_kpi = f'<div class="card"><h3>{tr("Duty Cycle/h por Nó")}</h3><div class="kpi" style="color:#8b949e">—</div><div class="kpi-sub">{tr("Aguardando dados de airUtilTx...")}</div></div>'
@@ -309,15 +329,15 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         air_avg = round(sum(air_active.values()) / len(air_active), 2) if air_active else None
         air_color = "green" if air_avg and air_avg < 10 else ("orange" if air_avg else "")
         air_kpi = (
-            f'<div class="card"><h3>{tr("Airtime TX (10 min, avg)")}</h3>'
-            f'<div class="kpi {air_color}">{air_avg if air_avg is not None else "—"}'
+            f'<div class="card"><h3>{tr("Airtime TX/h (média)")}</h3>'
+            f'<div id="air-avg-val" class="kpi {air_color}">{air_avg if air_avg is not None else "—"}'
             f'{"%" if air_avg is not None else ""}</div>'
-            f'<div class="kpi-sub">{tr("Média de TX de todos os nós nos últimos 10 min")}</div></div>'
+            f'<div class="kpi-sub">{tr("Média do TX de todos os nós na última hora")}</div></div>'
         )
 
         n_ts = len(ts_vals) or 1
         body = f"""
-<div class="subtitle">{tr("Canal LoRa · Airtime TX · Hourly Duty Cycle · {hora}", hora=self._now_str())}</div>
+<div class="subtitle">{tr("Canal LoRa · Airtime TX · Hourly Duty Cycle")}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #39d353;padding:8px 14px">
   <span style="color:#39d353;font-size:12px;font-weight:bold">{tr("🌐 Métrica da Rede")}</span><span style="color:#8b949e;font-size:11px"> {tr("network_metric_desc")}</span>
 </div>
@@ -327,9 +347,9 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
   <div class="chart-wrap-lg"><canvas id="chChart"></canvas></div>
 </div>
 <div class="card" style="margin-top:16px">
-  <h3>{tr("Por Nó — Ch. Util · Airtime TX · Duty Cycle/h")}</h3>
+  <h3>{tr("Por Nó — Ch. Util · Duty Cycle/h")}</h3>
   <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
-  <table><tr><th>ID</th><th>{tr("Nome")}</th><th>Ch. Util.</th><th>Air TX (10m)</th><th>Duty Cycle/h</th><th>{tr("Estado")}</th></tr><tbody id="ch-node-tbody" data-filterable="1">{rows}</tbody></table>
+  <table><tr><th>ID</th><th>{tr("Nome")}</th><th>Ch. Util.</th><th>{tr("Duty Cycle/h (Airtime TX)")}</th><th>{tr("Estado")}</th></tr><tbody id="ch-node-tbody" data-filterable="1">{rows}</tbody></table>
   <div style="color:#8b949e;font-size:10px;margin-top:8px;padding-top:8px;border-top:1px solid #21262d">
     {tr("duty_cycle_note")}
   </div>
@@ -366,8 +386,7 @@ window._metricsUpdateData = function(d) {{
   function set(id, v) {{ var e=document.getElementById(id); if(e) e.textContent=v; }}
   set('ch-net-val', d.ch_net_avg !== null && d.ch_net_avg !== undefined ? d.ch_net_avg + '%' : '—');
   set('dc-avg-val', d.worst_dc !== null && d.worst_dc !== undefined ? d.worst_dc + '%' : '—');
-  set('air-avg-val', d.air_avg !== null ? d.air_avg + '%' : '—');
-  set('ch-updated', d.now);
+  set('air-avg-val', d.air_avg !== null && d.air_avg !== undefined ? d.air_avg + '%' : '—');
   if(window._chChart && d.ts_vals && d.ts_vals.length > 0) {{
     window._chChart.data.labels = d.ts_labels;
     window._chChart.data.datasets[0].data = d.ts_vals;
@@ -382,15 +401,13 @@ window._metricsUpdateData = function(d) {{
     var DUTY_WARN=7, DUTY_LIMIT=10;
     var html='';
     d.rows.forEach(function(r) {{
-      var nid=r[0], nm=r[1], ch=r[2], air=r[3], dc=r[4];
-      var chTag = ch>50?'red':ch>25?'orange':'green';
-      var airTag = air<10?'green':air<25?'orange':'red';
+      var nid=r[0], nm=r[1], ch=r[2], dc=r[4];
+      var chTag = ch>=50?'red':ch>=25?'orange':'green';
       var dcColor = dc>=DUTY_LIMIT?'red':dc>=DUTY_WARN?'orange':'green';
       var dcPct = Math.min(Math.round(dc/DUTY_LIMIT*100),100);
       var barC = dcColor==='green'?'#39d353':dcColor==='orange'?'#f0883e':'#f85149';
       html += '<tr><td>'+nid+'</td><td>'+nm+'</td>'
             + '<td><span class="tag tag-'+chTag+'">'+ch+'%</span></td>'
-            + '<td><span class="tag tag-'+airTag+'">'+air+'%</span></td>'
             + '<td><span class="tag tag-'+dcColor+'">'+dc+'%</span>'
             + '<div class="bar-bg" style="margin-top:3px"><div class="bar-fill" style="width:'+dcPct+'%;background:'+barC+'"></div></div></td>'
             + '<td><span class="tag tag-'+dcColor+'">'
@@ -457,6 +474,26 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         # FIX: formula correspondente ao _data_rf no metrics_data.py
         snr_p10  = round(snr_sorted[int(0.1 * (n - 1))], 1) if n else None
 
+        # RSSI, hop limit esgotado e tabela por nó
+        rd = self._data_rf_radio()
+        rssi_avg = rd["rssi_avg"]
+        rssi_color = ("" if rssi_avg is None else "green" if rssi_avg > -100
+                      else "orange" if rssi_avg > -115 else "red")
+        exh = rd["hop_exhausted_pct"]
+        exh_color = ("" if exh is None else "green" if exh < self.HOP_EXHAUSTED_WARN
+                     else "orange" if exh < self.HOP_EXHAUSTED_CRIT else "red")
+        diag_tag = {"ok": "green", "noise": "orange", "weak": "red", "": "gray"}
+
+        def node_row(r):
+            nid, name, cnt, snr_v, rssi_v, hops_v, diag = r
+            return (f"<tr><td>{nid}</td><td>{name}</td><td>{cnt}</td>"
+                    f"<td>{'—' if snr_v is None else f'{snr_v:+.1f} dB'}</td>"
+                    f"<td>{'—' if rssi_v is None else f'{rssi_v} dBm'}</td>"
+                    f"<td>{'—' if hops_v is None else hops_v}</td>"
+                    f"<td><span class='tag tag-{diag_tag[diag]}'>{rd['lbl_diag'][diag]}</span></td></tr>")
+        rf_rows = "".join(node_row(r) for r in rd["node_rows"]) or \
+            f"<tr><td colspan='7' class='no-data'>{tr('Sem dados ainda')}</td></tr>"
+
         body = f"""
 <div class="subtitle" id="snr-n">{tr("Distribuição de SNR e hops · {n} amostras", n=len(self._snr_values))}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #39d353;padding:8px 14px">
@@ -470,6 +507,17 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
   <div class="card"><h3>{tr("SNR P10 (pior 10%)")}</h3>
     <div id="snr-p10" class="kpi red">{snr_p10 if snr_p10 is not None else '—'} dB</div></div>
 </div>
+<div class="grid-3">
+  <div class="card"><h3>{tr("RSSI Médio")}</h3>
+    <div id="rssi-avg" class="kpi {rssi_color}">{rssi_avg if rssi_avg is not None else '—'}{' dBm' if rssi_avg is not None else ''}</div>
+    <div id="rssi-sub" class="kpi-sub">{tr("mediana")} {rd["rssi_med"] if rd["rssi_med"] is not None else '—'} dBm · {rd["n_rssi"]} {tr("amostras")}</div></div>
+  <div class="card"><h3>{tr("Hop limit esgotado")}</h3>
+    <div id="hop-exh" class="kpi {exh_color}">{exh if exh is not None else '—'}{'%' if exh is not None else ''}</div>
+    <div id="hop-exh-sub" class="kpi-sub">{rd["lbl_exhausted_sub"]}<br>{tr("Acima de 5%: o hop limit pode ser curto para a rede")}</div></div>
+  <div class="card"><h3>{tr("Amostras de rádio")}</h3>
+    <div id="rf-n" class="kpi blue">{len(self._snr_values)}</div>
+    <div id="rf-mqtt" class="kpi-sub">{rd["lbl_mqtt_excluded"]}<br>{tr("Só pacotes ouvidos pela rádio do nó local")}</div></div>
+</div>
 <div class="grid">
   <div class="card">
     <h3>{tr("Distribuição SNR (dB)")}</h3>
@@ -479,6 +527,11 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
     <h3>{tr("Distribuição de Hops")}</h3>
     <div class="chart-wrap"><canvas id="hopsChart"></canvas></div>
   </div>
+</div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Por Nó — SNR × RSSI")}</h3>
+  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("rf_diag_hint")}</div>
+  <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Pacotes")}</th><th>SNR</th><th>RSSI</th><th>Hops</th><th>{tr("Diagnóstico")}</th></tr><tbody id="rf-node-tbody" data-filterable="1">{rf_rows}</tbody></table>
 </div>
 <div class="card" id="assessment-card" style="margin-top:16px;border-left:4px solid {
 '#39d353' if snr_avg and snr_avg >= 5 else '#f0883e' if snr_avg and snr_avg >= 0 else '#f85149'
@@ -544,7 +597,37 @@ window._metricsUpdateData = function(d) {{
     window._hopsChart.data.datasets[0].data = d.hop_counts;
     window._hopsChart.update('none');
   }}
+  // RSSI, hop limit e tabela por nó
+  function setClass(id, cls) {{ var e=document.getElementById(id); if(e) e.className='kpi '+cls; }}
+  set('rssi-avg', d.rssi_avg !== null ? d.rssi_avg + ' dBm' : '—');
+  setClass('rssi-avg', d.rssi_avg === null ? '' : d.rssi_avg > -100 ? 'green' : d.rssi_avg > -115 ? 'orange' : 'red');
+  set('rssi-sub', (d.lbl_median||'median') + ' ' + (d.rssi_med !== null ? d.rssi_med : '—') + ' dBm · ' + d.n_rssi + ' ' + (d.unit_amostras||'samples'));
+  set('hop-exh', d.hop_exhausted_pct !== null ? d.hop_exhausted_pct + '%' : '—');
+  setClass('hop-exh', d.hop_exhausted_pct === null ? '' : d.hop_exhausted_pct < {self.HOP_EXHAUSTED_WARN} ? 'green' : d.hop_exhausted_pct < {self.HOP_EXHAUSTED_CRIT} ? 'orange' : 'red');
+  set('rf-n', d.n);
+  var mq=document.getElementById('rf-mqtt'); if(mq && mq.firstChild) mq.firstChild.textContent = d.lbl_mqtt_excluded;
+  var ex=document.getElementById('hop-exh-sub'); if(ex && ex.firstChild) ex.firstChild.textContent = d.lbl_exhausted_sub;
+  var tb=document.getElementById('rf-node-tbody');
+  if(tb && d.node_rows && d.node_rows.length) {{
+    var tag={{ok:'green',noise:'orange',weak:'red','':'gray'}}, h='';
+    d.node_rows.forEach(function(r) {{
+      var snr=r[3]===null?'—':(r[3]>0?'+':'')+r[3].toFixed(1)+' dB';
+      var rssi=r[4]===null?'—':r[4]+' dBm';
+      h+='<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+snr+'</td><td>'+rssi+'</td><td>'
+        +(r[5]===null?'—':r[5])+'</td><td><span class="tag tag-'+tag[r[6]]+'">'+d.lbl_diag[r[6]]+'</span></td></tr>';
+    }});
+    tb.innerHTML=h; _applyFilter();
+  }}
 }};
+var _currentFilter='';
+function _applyFilter(){{
+  var ft=_currentFilter;
+  document.querySelectorAll('table tbody[data-filterable] tr').forEach(function(row){{
+    var hay=Array.from(row.querySelectorAll('td')).map(function(c){{return c.textContent.toLowerCase();}}).join(' ');
+    row.style.display=(!ft||hay.indexOf(ft)!==-1)?'':'none';
+  }});
+}}
+window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase().trim();_applyFilter();}};
 </script>"""
         return self._base_html(tr("📶 Qualidade RF"), body)
 
@@ -842,7 +925,7 @@ window._hwChart = new Chart(document.getElementById('hwChart'), {{
 
         _hw_card = (f'<div class="card" style="margin-top:16px"><h3>{tr("Hardware por Modelo ({n} nós)", n=len(hw_model))}</h3><div class="chart-wrap-lg"><canvas id="hwChart"></canvas></div></div>' if hw_labels else '')
         body = f"""
-<div class="subtitle">{tr("Saúde dos nós, baterias e hardware · {hora}", hora=self._now_str())}</div>
+<div class="subtitle">{tr("Saúde dos nós, baterias e hardware")}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #39d353;padding:8px 14px">
   <span style="color:#39d353;font-size:12px;font-weight:bold">{tr("🌐 Métrica da Rede")}</span><span style="color:#8b949e;font-size:11px"> {tr("network_metric_desc")}</span>
 </div>
@@ -948,6 +1031,114 @@ window._metricsFilterTable = function(text) {{
         return self._base_html(tr("🔋 Nós & Bateria"), body)
 
     # ── 6. Fiabilidade ────────────────────────────────────────────────────
+    def _html_environment(self) -> str:
+        import html as _html
+        d = self._data_environment()
+        if not d["n_env"] and not d["n_power"]:
+            body = (f'<div class="no-data">{tr("⏳ Ainda nenhum nó enviou telemetria de ambiente ou energia.")}<br><br>'
+                    f'<span style="font-size:12px">{tr("environment_hint")}</span></div>')
+            return self._base_html(tr("🌡 Ambiente & Energia"), body)
+
+        esc = lambda v: _html.escape(str(v))
+
+        def kpi(val, label, color, kid, sub="", sub_id=""):
+            sid = f' id="{sub_id}"' if sub_id else ""
+            return (f'<div class="card"><h3>{label}</h3><div id="{kid}" class="kpi {color}">{val}</div>'
+                    f'<div{sid} class="kpi-sub">{sub}</div></div>')
+
+        tmax, tmin = d["temp_max"], d["temp_min"]
+        head = "".join(f"<th>{esc(label)}</th>" for label, _u in d["cols"])
+
+        def env_row(r):
+            nid, name, cells, ago, stale = r
+            style = " style='opacity:.55'" if stale else ""
+            return (f"<tr{style}><td>{esc(nid)}</td><td>{esc(name)}</td>"
+                    + "".join(f"<td>{'—' if c is None else esc(c)}</td>" for c in cells)
+                    + f"<td style='color:#8b949e'>{esc(ago)}</td></tr>")
+        env_html = "".join(env_row(r) for r in d["env_rows"]) or \
+            f"<tr><td colspan='99' class='no-data'>{tr('Sem dados ainda')}</td></tr>"
+        power_html = "".join(
+            f"<tr><td>{esc(nid)}</td><td>{esc(name)}</td><td>{esc(' · '.join(parts))}</td>"
+            f"<td style='color:#8b949e'>{esc(ago)}</td></tr>"
+            for nid, name, parts, ago in d["power_rows"])
+
+        power_card = f"""
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Energia (sensores INA)")}</h3>
+  <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Canais")}</th><th>{tr("Actualizado")}</th></tr>
+  <tbody id="power-tbody" data-filterable="1">{power_html}</tbody></table>
+</div>""" if d["power_rows"] else ""
+
+        chart_card = f"""
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Temperatura ao longo do tempo")}</h3>
+  <div class="chart-wrap-lg"><canvas id="tempChart"></canvas></div>
+</div>""" if d["temp_series"] else ""
+
+        body = f"""
+<div class="subtitle">{tr("Sensores de ambiente, qualidade do ar e energia dos nós")}</div>
+<div class="grid-3">
+  {kpi(d["n_env"], tr("Nós com sensores"), "blue", "env-n", tr("{n} com medição de energia", n=d["n_power"]), "env-n-sub")}
+  {kpi("—" if tmax is None else f"{tmax[1]} °C", tr("Mais quente"), "orange", "env-max", "" if tmax is None else esc(tmax[0]), "env-max-sub")}
+  {kpi("—" if tmin is None else f"{tmin[1]} °C", tr("Mais frio"), "blue", "env-min", "" if tmin is None else esc(tmin[0]) + (f" · {tr('média')} {d['temp_avg']} °C" if d['temp_avg'] is not None else ""), "env-min-sub")}
+</div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Últimas leituras por nó")}</h3>
+  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")} · {tr("Leituras com mais de 2 h aparecem esbatidas.")}</div>
+  <table><tr><th>ID</th><th>{tr("Nome")}</th>{head}<th>{tr("Actualizado")}</th></tr>
+  <tbody id="env-tbody" data-filterable="1">{env_html}</tbody></table>
+</div>
+{power_card}
+{chart_card}
+<script>
+var _palette=['#f0883e','#58a6ff','#39d353','#bc8cff','#f85149','#e3b341'];
+function _hm(v){{ var t=new Date(v); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); }}
+function _datasets(series){{ return series.map(function(s,i){{ return {{ label:s.name, data:s.points,
+  borderColor:_palette[i%6], backgroundColor:_palette[i%6], tension:0.3, pointRadius:2, fill:false }}; }}); }}
+if(document.getElementById('tempChart')) {{
+  window._tempChart = new Chart(document.getElementById('tempChart'), {{
+    type:'line', data:{{ datasets:_datasets({json.dumps(d["temp_series"])}) }},
+    options:{{ responsive:true, maintainAspectRatio:false, parsing:false,
+      scales:{{ x:{{ type:'linear', grid:{{color:'#21262d'}}, ticks:{{color:'#8b949e', callback:_hm, maxTicksLimit:8}} }},
+                y:{{ grid:{{color:'#21262d'}}, ticks:{{color:'#8b949e', callback:function(v){{return v+' °C';}}}} }} }},
+      plugins:{{ legend:{{ labels:{{ color:'#8b949e', boxWidth:12 }} }},
+                 tooltip:{{ callbacks:{{ title:function(c){{return _hm(c[0].parsed.x);}} }} }} }} }}
+  }});
+}}
+var _currentFilter='';
+function _applyFilter(){{
+  var ft=_currentFilter;
+  document.querySelectorAll('table tbody[data-filterable] tr').forEach(function(row){{
+    var hay=Array.from(row.querySelectorAll('td')).map(function(c){{return c.textContent.toLowerCase();}}).join(' ');
+    row.style.display=(!ft||hay.indexOf(ft)!==-1)?'':'none';
+  }});
+}}
+window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase().trim();_applyFilter();}};
+function _esc(v){{ return String(v===null||v===undefined?'':v).replace(/[&<>"]/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c];}}); }}
+window._metricsUpdateData=function(d){{
+  function set(id,v){{ var e=document.getElementById(id); if(e) e.textContent=v; }}
+  set('env-n', d.n_env);
+  if(d.temp_max){{ set('env-max', d.temp_max[1]+' °C'); set('env-max-sub', d.temp_max[0]); }}
+  if(d.temp_min){{ set('env-min', d.temp_min[1]+' °C'); }}
+  var tb=document.getElementById('env-tbody');
+  // Só se as colunas não mudaram; se apareceu um sensor novo, a página é recarregada abaixo.
+  if(tb && d.env_rows.length && d.cols.length === {len(d["cols"])}){{
+    tb.innerHTML=d.env_rows.map(function(r){{
+      return '<tr'+(r[4]?' style="opacity:.55"':'')+'><td>'+_esc(r[0])+'</td><td>'+_esc(r[1])+'</td>'
+        + r[2].map(function(c){{return '<td>'+(c===null?'—':_esc(c))+'</td>';}}).join('')
+        + '<td style="color:#8b949e">'+_esc(r[3])+'</td></tr>'; }}).join('');
+  }} else if(d.cols.length !== {len(d["cols"])}) {{ location.reload(); return; }}
+  var pb=document.getElementById('power-tbody');
+  if(pb && d.power_rows.length){{
+    pb.innerHTML=d.power_rows.map(function(r){{ return '<tr><td>'+_esc(r[0])+'</td><td>'+_esc(r[1])+'</td><td>'
+      +_esc(r[2].join(' · '))+'</td><td style="color:#8b949e">'+_esc(r[3])+'</td></tr>'; }}).join('');
+  }}
+  if(window._tempChart && d.temp_series.length){{ window._tempChart.data.datasets=_datasets(d.temp_series); window._tempChart.update('none'); }}
+  _applyFilter();
+}};
+</script>"""
+        return self._base_html(tr("🌡 Ambiente & Energia"), body)
+
     def _html_latency(self) -> str:
         d = self._data_latency()
         if d["n"] == 0:
@@ -966,7 +1157,7 @@ window._metricsFilterTable = function(text) {{
                      else "orange" if d["avg"] and d["avg"] < 30 else "red")
 
         body = f"""
-<div class="subtitle" id="rtt-n">{tr("RTT (Round-Trip Time) — tempo entre envio e ACK · {n} amostras · {hora}", n=d['n'], hora=d['now'])}</div>
+<div class="subtitle" id="rtt-n">{tr("RTT (Round-Trip Time) — tempo entre envio e ACK · {n} amostras", n=d['n'])}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #f0883e;padding:8px 14px">
   <span style="color:#f0883e;font-size:12px;font-weight:bold">{tr("🏠 Métrica do Nó Local")}</span><span style="color:#8b949e;font-size:11px"> {tr("local_metric_desc")}</span>
 </div>
@@ -1040,11 +1231,9 @@ window._metricsUpdateData = function(d) {{
         # removidos (_duplicates, _routing_acks/_naks).
         d = self._data_reliability()
 
-        dup_rate        = d['dup_rate']
         net_nak_rate    = d['net_nak_rate']
         p_col           = d['p_col']
         total_pkt       = d['total_pkt']
-        duplicates      = d['duplicates']
         active_senders  = d['active_senders']
         sent            = d['sent']
         acked           = d['acked']
@@ -1057,16 +1246,6 @@ window._metricsUpdateData = function(d) {{
         net_naks        = d['net_naks']
         fw_errs         = d['fw_errs']
 
-        # Cores e labels calculados localmente para o render inicial
-        if dup_rate is None:
-            dup_color, dup_label = "", tr("Sem dados")
-        elif dup_rate < 10:
-            dup_color, dup_label = "orange", tr("[!] Possível congestionamento")
-        elif dup_rate <= 60:
-            dup_color, dup_label = "green",  tr("✅ Flood saudável")
-        else:
-            dup_color, dup_label = "red",    tr("[!] Possível congestionamento")
-
         nak_net_color = ("" if net_nak_rate is None else
                          "green" if net_nak_rate < 5 else
                          "orange" if net_nak_rate < 20 else "red")
@@ -1075,7 +1254,7 @@ window._metricsUpdateData = function(d) {{
                      "green"  if p_col < 5  else
                      "orange" if p_col < 15 else "red")
         col_label = (tr("Sem dados de Ch.Util.") if p_col is None else
-                     tr("✅ Flood saudável")      if p_col < 5  else
+                     tr("✅ Baixo")               if p_col < 5  else
                      tr("⚠ Próximo do limite")   if p_col < 15 else
                      tr("[!] Risco elevado"))
 
@@ -1098,9 +1277,9 @@ window._metricsUpdateData = function(d) {{
 {no_net_data}
 <div class="grid" style="margin-bottom:12px">
   <div class="card">
-    <h3>{tr("Taxa de Flood (5 min)")}</h3>
-    <div id="rel-dup" class="kpi {dup_color}">{dup_rate if dup_rate is not None else '—'}{'%' if dup_rate is not None else ''}</div>
-    <div id="rel-dup-label" class="kpi-sub">{dup_label}<br>{tr("% de pacotes únicos reencaminhados por ≥2 nós")}</div>
+    <h3>{tr("Pacotes únicos (5 min)")}</h3>
+    <div id="rel-pkt" class="kpi blue">{total_pkt}</div>
+    <div id="rel-pkt-sub" class="kpi-sub">{d['lbl_pkt_sub']}</div>
   </div>
   <div class="card">
     <h3>{tr("Colisões Estimadas (CAD)")}</h3>
@@ -1115,9 +1294,9 @@ window._metricsUpdateData = function(d) {{
     <div id="rel-net-sub" class="kpi-sub">ACK: {net_acks} · NAK entrega: {net_naks} · Erros FW: {fw_errs}<br>{tr("NAK = requestId + errorReason · Erros FW = sem requestId")}</div>
   </div>
   <div class="card">
-    <h3>{tr("Pacotes únicos (5 min)")}</h3>
-    <div id="rel-pkt" class="kpi blue">{total_pkt}</div>
-    <div id="rel-pkt-sub" class="kpi-sub">{tr("{n} nós emissores · {m} duplicados vistos", n=active_senders, m=duplicates)}</div>
+    <h3>{tr("Duplicados na rede")}</h3>
+    <div id="rel-ls-dupe" class="kpi {'' if d['ls_dupe_pct'] is None else 'green' if d['ls_dupe_pct'] < self.DUPE_WARN else 'orange' if d['ls_dupe_pct'] < self.DUPE_CRIT else 'red'}">{'—' if d['ls_dupe_pct'] is None else str(d['ls_dupe_pct']) + '%'}</div>
+    <div id="rel-ls-dupe-sub" class="kpi-sub">{d['lbl_ls_dupe']}</div>
   </div>
 </div>
 <div class="grid" style="margin-top:14px">
@@ -1131,7 +1310,6 @@ window._metricsUpdateData = function(d) {{
     <h3>{tr("Referências")}</h3>
     <table>
       <tr><th>{tr("Métrica")}</th><th>{tr("Referência")}</th></tr>
-      <tr><td>{tr("Taxa de flood")}</td><td><span class='tag tag-orange'>&lt;10% {tr("<10% Fraco")[4:]}</span> <span class='tag tag-green'>10-60% Normal</span> <span class='tag tag-red'>&gt;60% {tr(">60% Congestionado")[4:]}</span></td></tr>
       <tr><td>{tr("NAK da rede")}</td><td><span class='tag tag-green'>&lt;5% Normal</span> <span class='tag tag-orange'>5-20% {tr("5-20% Atenção")[4:]}</span> <span class='tag tag-red'>&gt;20% {tr(">20% Crítico")[4:]}</span></td></tr>
       <tr><td>{tr("Entrega local")}</td><td><span class='tag tag-green'>&ge;90% ACK real</span> <span class='tag tag-orange'>70-90%</span> <span class='tag tag-red'>&lt;70%</span></td></tr>
     </table>
@@ -1142,9 +1320,9 @@ window._metricsUpdateData = function(d) {{
 {no_local_data}
 <div class="grid-3">
   <div class="card">
-    <h3>{tr("Taxa de Entrega Real")}</h3>
+    <h3>{tr("Taxa de Entrega Real (DMs)")}</h3>
     <div id="rel-delivery" class="kpi {dr_color}">{delivery if delivery is not None else '—'}{'%' if delivery is not None else ''}</div>
-    <div class="kpi-sub">{tr("ACK do destinatário ÷ (ACK+NAK)")}<br><i>{tr("Não inclui retransmissões locais")}</i></div>
+    <div class="kpi-sub">{tr("ACK do destinatário ÷ (ACK+NAK)")}<br><i>{tr("Mensagens de canal não têm ACK do destino: contam como Relay quando alguém as retransmite.")}</i></div>
   </div>
   <div class="card">
     <h3>{tr("Taxa NAK Local")}</h3>
@@ -1154,6 +1332,7 @@ window._metricsUpdateData = function(d) {{
   <div class="card">
     <h3>{tr("Mensagens Enviadas")}</h3>
     <div id="rel-sent" class="kpi blue">{sent}</div>
+    <div id="rel-kind" class="kpi-sub">DM: {d['sent_dm']} · {tr("Canal")}: {d['sent_channel']}</div>
     <div id="rel-sub" class="kpi-sub">ACK: {acked} · NAK: {naked} · Relay: {ack_impl} · Pend.: {pending}</div>
   </div>
 </div>
@@ -1203,9 +1382,6 @@ window._metricsUpdateData = function(d) {{
   function setClass(id, cls) {{ var e=document.getElementById(id); if(e) e.className='kpi '+cls; }}
 
   // Rede
-  set('rel-dup',       d.dup_rate !== null ? d.dup_rate + '%' : '\u2014');
-  setClass('rel-dup',  d.dup_rate === null ? '' : d.dup_rate < 10 ? 'orange' : d.dup_rate <= 60 ? 'green' : 'red');
-  set('rel-dup-label', d.lbl_dup);
   set('rel-col', d.p_col !== null && d.p_col !== undefined ? d.p_col + '%' : '\u2014');
   setClass('rel-col',  d.p_col === null ? '' : d.p_col < 5 ? 'green' : d.p_col < 15 ? 'orange' : 'red');
   set('rel-col-label', d.lbl_col + (d.ch_util_avg !== null ? ' \u00b7 Ch.Util: ' + d.ch_util_avg + '%' : ''));
@@ -1213,6 +1389,9 @@ window._metricsUpdateData = function(d) {{
   setClass('rel-net-nak', d.net_nak_rate === null ? '' : d.net_nak_rate < 5 ? 'green' : d.net_nak_rate < 20 ? 'orange' : 'red');
   set('rel-net-sub',   'ACK: ' + d.net_acks + ' \u00b7 NAK entrega: ' + d.net_naks + ' \u00b7 Erros FW: ' + (d.fw_errs||0));
   set('rel-pkt',       d.total_pkt);
+  set('rel-ls-dupe',   d.ls_dupe_pct !== null && d.ls_dupe_pct !== undefined ? d.ls_dupe_pct + '%' : '\u2014');
+  setClass('rel-ls-dupe', d.ls_dupe_pct === null || d.ls_dupe_pct === undefined ? '' : d.ls_dupe_pct < {self.DUPE_WARN} ? 'green' : d.ls_dupe_pct < {self.DUPE_CRIT} ? 'orange' : 'red');
+  set('rel-ls-dupe-sub', d.lbl_ls_dupe);
   set('rel-pkt-sub',   d.lbl_pkt_sub);
 
   // Nó local
@@ -1221,6 +1400,7 @@ window._metricsUpdateData = function(d) {{
   set('rel-nak',       d.nak_rate !== null ? d.nak_rate + '%' : '\u2014');
   setClass('rel-nak',  d.nak_rate === null ? '' : d.nak_rate > 20 ? 'red' : d.nak_rate > 0 ? 'orange' : 'green');
   set('rel-sent',      d.sent);
+  set('rel-kind',      'DM: ' + d.sent_dm + ' \u00b7 ' + (d.lbl_channel || 'Canal') + ': ' + d.sent_channel);
   set('rel-sub',       'ACK: ' + d.acked + ' \u00b7 NAK: ' + d.naked + ' \u00b7 Relay: ' + d.ack_implicit + ' \u00b7 Pend.: ' + d.pending);
 
   // Charts
@@ -1275,7 +1455,7 @@ window._metricsUpdateData = function(d) {{
             rows_html = f"<tr><td colspan='6' class='no-data'>{tr('Sem pares')}</td></tr>"
 
         body = f"""
-<div class="subtitle">{tr('Nós que se vêem mutuamente via LoRa · {n} nós reportaram · {m} pares únicos · {hora}', n=d['n_nodes'], m=d['n_links'], hora=d['now'])}</div>
+<div class="subtitle">{tr('Nós que se vêem mutuamente via LoRa · {n} nós reportaram · {m} pares únicos', n=d['n_nodes'], m=d['n_links'])}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #8b949e;padding:8px 14px">
   <span style="color:#8b949e;font-size:11px">{tr('viz_metric_info')}</span>
 </div>
@@ -1314,92 +1494,148 @@ window._metricsFilterTable = function(text) {{
         return self._base_html(tr("🔗 Vizinhança"), body)
 
     # ── 9. Alcance & Links ────────────────────────────────────────────────
+    def _neighborinfo_howto(self) -> str:
+        return (
+            f'<p style="font-size:13px;color:#e6edf3;font-weight:bold;margin-bottom:8px">{tr("⚙ Como activar o NeighborInfo")}</p>'
+            f'<p style="color:#8b949e;font-size:12px;margin-bottom:8px">{tr("neighborinfo_intro")}</p>'
+            '<ol style="color:#8b949e;font-size:12px;padding-left:20px;line-height:2.0">'
+            f'<li>{tr("neighborinfo_li1")}</li>'
+            f'<li>{tr("neighborinfo_li2")}</li>'
+            f'<li>{tr("neighborinfo_li3")}</li>'
+            f'<li>{tr("neighborinfo_li4_range")}</li>'
+            '</ol>'
+            f'<p style="margin-top:10px;color:#8b949e;font-size:11px">{tr("neighborinfo_note1")}<br>'
+            f'{tr("neighborinfo_note2")}</p>'
+            f'<p style="margin-top:8px;color:#8b949e;font-size:11px">{tr("range_haversine")}</p>'
+        )
+
     def _html_range_links(self) -> str:
         d = self._data_range_links()
-        if not d["rows"]:
+        if not (d["rows"] or d["direct_rows"] or d["relay_rows"]):
             body = (
                 f'<div style="padding:20px 24px;max-width:660px;margin:0 auto">'
                 f'<p style="color:#8b949e;font-size:13px;margin-bottom:16px">{tr("⏳ Sem dados de alcance ainda.")}<br><br>'
-                f'{tr("Requer que os nós reportem posição GPS (POSITION_APP)")}<br>'
-                f'{tr("e que os dados de vizinhança (NEIGHBORINFO_APP) estejam disponíveis.")}<br>'
+                f'{tr("range_waiting_sources")}<br>'
                 f'{tr("Nós com GPS conhecidos até agora: {n}", n="<b>"+str(d["n_with_gps"])+"</b>")}</p>'
                 '<hr style="border:none;border-top:1px solid #30363d;margin:16px 0">'
-                f'<p style="font-size:13px;color:#e6edf3;font-weight:bold;margin-bottom:8px">{tr("⚙ Como activar o NeighborInfo")}</p>'
-                f'<p style="color:#8b949e;font-size:12px;margin-bottom:8px">{tr("neighborinfo_intro")}</p>'
-                '<ol style="color:#8b949e;font-size:12px;padding-left:20px;line-height:2.0">'
-                f'<li>{tr("neighborinfo_li1")}</li>'
-                f'<li>{tr("neighborinfo_li2")}</li>'
-                f'<li>{tr("neighborinfo_li3")}</li>'
-                f'<li>{tr("neighborinfo_li4_range")}</li>'
-                '</ol>'
-                f'<p style="margin-top:10px;color:#8b949e;font-size:11px">{tr("neighborinfo_note1")}<br>'
-                f'{tr("neighborinfo_note2")}</p>'
-                f'<p style="margin-top:8px;color:#8b949e;font-size:11px">{tr("range_haversine")}</p>'
-                '</div>'
+                f'{self._neighborinfo_howto()}</div>'
             )
             return self._base_html(tr("📏 Alcance & Links"), body)
 
-        def kpi(val, unit, label, color="", kid="", note=""):
-            v = f"{val}{unit}" if val is not None else "—"
+        def kpi(val, label, color="", kid="", note="", note_id=""):
             id_attr = f' id="{kid}"' if kid else ""
-            note_html = f'<div class="kpi-sub" style="font-size:10px">{note}</div>' if note else ""
-            return f'<div class="card"><h3>{label}</h3><div{id_attr} class="kpi {color}">{v}</div>{note_html}</div>'
+            nid_attr = f' id="{note_id}"' if note_id else ""
+            return (f'<div class="card"><h3>{label}</h3><div{id_attr} class="kpi {color}">{val}</div>'
+                    f'<div{nid_attr} class="kpi-sub">{note}</div></div>')
 
-        rows_html = ""
+        def snr_tag(v):
+            if v is None:
+                return "<span class='tag tag-gray'>—</span>"
+            c = "green" if v >= 5 else "orange" if v >= -5 else "red"
+            return f"<span class='tag tag-{c}'>{v:+.1f} dB</span>"
+
+        def dist_tag(v):
+            if v is None:
+                return f"<span class='tag tag-gray'>{tr('sem GPS')}</span>"
+            c = "green" if v < 2 else "orange" if v < 10 else "blue"
+            return f"<span class='tag tag-{c}'>{v} km</span>"
+
+        direct_html = "".join(
+            f"<tr><td>{nid}</td><td>{name}</td><td>{dist_tag(dist)}</td><td>{snr_tag(best)}</td>"
+            f"<td>{snr_tag(last)}</td><td>{n}</td></tr>"
+            for nid, name, dist, best, last, n in d["direct_rows"]
+        ) or f"<tr><td colspan='6' class='no-data'>{tr('Ainda nenhum pacote recebido directamente (0 hops).')}</td></tr>"
+
+        def relay_row(r):
+            byte, name, cnt, pct, n_cands = r
+            label = name or f"<span style='color:#8b949e'>{d['lbl_unknown_relay']}</span>"
+            if n_cands > 1:
+                label += f" <span class='tag tag-orange'>{d['lbl_ambiguous']}</span>"
+            return (f"<tr><td class='mono'>{byte}</td><td>{label}</td><td>{cnt}</td>"
+                    f"<td><div class='bar-bg'><div class='bar-fill' style='width:{pct}%;background:#58a6ff'></div></div>"
+                    f"<span style='font-size:10px;color:#8b949e'>{pct}%</span></td></tr>")
+        relay_html = "".join(relay_row(r) for r in d["relay_rows"]) or \
+            f"<tr><td colspan='4' class='no-data'>{tr('relay_waiting')}</td></tr>"
+
+        nb_html = ""
         for from_id, from_n, nb_id, nb_n, dist, snr_str, snr_val in d["rows"]:
-            dist_color = "green" if dist < 2 else ("orange" if dist < 10 else "blue")
-            if snr_val is not None:
-                snr_color = "green" if snr_val >= 5 else ("orange" if snr_val >= 0 else "red")
-            else:
-                snr_color = "gray"
-            rows_html += (
-                f"<tr><td>{from_id}</td><td>{from_n}</td>"
-                f"<td>{nb_id}</td><td>{nb_n}</td>"
-                f"<td><span class='tag tag-{dist_color}'>{dist} km</span></td>"
-                f"<td><span class='tag tag-{snr_color}'>{snr_str} dB</span></td></tr>"
-            )
-
-        body = f"""
-<div class="subtitle">{tr('Alcance dos links LoRa directos (requer GPS + NeighborInfo) · {hora}', hora=d['now'])}</div>
-<div class="card" style="margin-bottom:16px;border-left:4px solid #8b949e;padding:8px 14px">
-  <span style="color:#8b949e;font-size:11px">{tr('range_metric_info')}</span>
-</div>
-<div class="grid-3" style="margin-bottom:16px">
-  {kpi(f"{d['max_range']:.2f}" if d['max_range'] else None, " km", tr("Maior Alcance"), "blue")}
-  <div class="card"><h3>{tr('Par de maior alcance')}</h3>
-    <div style="font-size:14px;font-weight:bold;color:#58a6ff">
-      {d['max_pair'][0]} ↔ {d['max_pair'][1]}
-    </div></div>
-  {kpi(d['n_with_gps'], " " + tr("nós"), tr("Nós com GPS"), "")}
-</div>
-<div class="card">
-  <h3>{tr('Links por Alcance')}</h3>
-  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
+            nb_html += (f"<tr><td>{from_id}</td><td>{from_n}</td><td>{nb_id}</td><td>{nb_n}</td>"
+                        f"<td>{dist_tag(dist)}</td><td>{snr_tag(snr_val)}</td></tr>")
+        nb_card = (f"""
+<div class="card" style="margin-top:16px">
+  <h3>{tr('Links NeighborInfo por Alcance')}</h3>
   <table>
     <tr><th>ID A</th><th>{tr('Nome A')}</th><th>ID B</th><th>{tr('Nome B')}</th><th>{tr('Distância')}</th><th>SNR</th></tr>
-    <tbody data-filterable="1">{rows_html}</tbody>
+    <tbody id="nb-range-tbody" data-filterable="1">{nb_html}</tbody>
+  </table>
+</div>""" if d["rows"] else f"""
+<details class="card" style="margin-top:16px">
+  <summary style="cursor:pointer;color:#8b949e;font-size:12px">{tr('Sem links NeighborInfo com GPS — como activar')}</summary>
+  <div style="margin-top:10px">{self._neighborinfo_howto()}</div>
+</details>""")
+
+        far_note = (d["max_direct_name"] if d["max_direct"] is not None else
+                    tr("Sem posição GPS do nó local") if not d["has_local_pos"] else tr("Nenhum nó directo com GPS"))
+        nb_max = f"{d['max_range']:.2f} km" if d["max_range"] else "—"
+        body = f"""
+<div class="subtitle">{tr('range_subtitle')}</div>
+<div class="grid-3" style="margin-bottom:16px">
+  {kpi(f"{d['max_direct']} km" if d['max_direct'] is not None else "—", tr("Maior alcance directo"), "blue", "rl-direct", far_note, "rl-direct-sub")}
+  {kpi(d['n_direct'], tr("Nós ouvidos directamente"), "green", "rl-ndirect", tr("0 hops, por rádio, nesta sessão"))}
+  {kpi(nb_max, tr("Maior link NeighborInfo"), "", "rl-nb", f"{d['max_pair'][0]} ↔ {d['max_pair'][1]}" if d['max_range'] else tr("Requer NeighborInfo + GPS"))}
+</div>
+<div class="card">
+  <h3>{tr('Alcance directo (0 hops)')}</h3>
+  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr('direct_range_hint')}</div>
+  <table>
+    <tr><th>ID</th><th>{tr('Nome')}</th><th>{tr('Distância')}</th><th>{tr('Melhor SNR')}</th><th>{tr('Último SNR')}</th><th>{tr('Pacotes')}</th></tr>
+    <tbody id="direct-tbody" data-filterable="1">{direct_html}</tbody>
   </table>
 </div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr('Quem mais retransmite para o nó local')}</h3>
+  <div id="relay-sub" style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr('relay_hint', n=d['relayed_total'])}</div>
+  <table>
+    <tr><th>{tr('Byte')}</th><th>{tr('Nó')}</th><th>{tr('Pacotes')}</th><th>%</th></tr>
+    <tbody id="relay-tbody" data-filterable="1">{relay_html}</tbody>
+  </table>
+</div>
+{nb_card}
 <script>
-window._metricsUpdateData=function(d){{}};
-window._metricsFilterTable = function(text) {{
-  var ft = (text || '').toLowerCase().trim();
-  document.querySelectorAll('table tbody[data-filterable]').forEach(function(tbody) {{
-    var found = 0;
-    tbody.querySelectorAll('tr:not(.filter-no-match)').forEach(function(row) {{
-      var hay = Array.from(row.querySelectorAll('td')).map(function(c){{ return c.textContent.toLowerCase(); }}).join(' ');
-      var ok = !ft || hay.indexOf(ft) !== -1;
-      row.style.display = ok ? '' : 'none';
-      if (ok) found++;
-    }});
-    var noRow = tbody.querySelector('.filter-no-match');
-    if (!noRow) {{
-      noRow = document.createElement('tr'); noRow.className = 'filter-no-match';
-      noRow.innerHTML = '<td colspan="99" style="color:#f0883e;padding:8px;text-align:center;font-size:12px">🔍 ' + (ft ? '{tr("metrics_no_results")}' + ' &quot;' + ft + '&quot;' : '') + '</td>';
-      tbody.appendChild(noRow);
-    }}
-    noRow.style.display = (ft && found === 0) ? '' : 'none';
+var _currentFilter='';
+function _applyFilter(){{
+  var ft=_currentFilter;
+  document.querySelectorAll('table tbody[data-filterable] tr').forEach(function(row){{
+    var hay=Array.from(row.querySelectorAll('td')).map(function(c){{return c.textContent.toLowerCase();}}).join(' ');
+    row.style.display=(!ft||hay.indexOf(ft)!==-1)?'':'none';
   }});
+}}
+window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase().trim();_applyFilter();}};
+function _esc(v){{ return String(v===null||v===undefined?'':v).replace(/[&<>"]/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c];}}); }}
+function _snrTag(v){{ if(v===null||v===undefined) return "<span class='tag tag-gray'>—</span>";
+  var c=v>=5?'green':v>=-5?'orange':'red'; return "<span class='tag tag-"+c+"'>"+(v>0?'+':'')+v.toFixed(1)+" dB</span>"; }}
+function _distTag(v, noGps){{ if(v===null||v===undefined) return "<span class='tag tag-gray'>"+noGps+"</span>";
+  var c=v<2?'green':v<10?'orange':'blue'; return "<span class='tag tag-"+c+"'>"+v+" km</span>"; }}
+window._metricsUpdateData=function(d){{
+  function set(id,v){{ var e=document.getElementById(id); if(e) e.textContent=v; }}
+  set('rl-direct', d.max_direct!==null ? d.max_direct+' km' : '—');
+  if(d.max_direct!==null) set('rl-direct-sub', d.max_direct_name);
+  set('rl-ndirect', d.n_direct);
+  var t=document.getElementById('direct-tbody');
+  if(t && d.direct_rows.length){{
+    t.innerHTML=d.direct_rows.map(function(r){{ return '<tr><td>'+_esc(r[0])+'</td><td>'+_esc(r[1])+'</td><td>'+_distTag(r[2], d.lbl_no_gps)
+      +'</td><td>'+_snrTag(r[3])+'</td><td>'+_snrTag(r[4])+'</td><td>'+r[5]+'</td></tr>'; }}).join('');
+  }}
+  var rt=document.getElementById('relay-tbody');
+  if(rt && d.relay_rows.length){{
+    rt.innerHTML=d.relay_rows.map(function(r){{
+      var lbl=r[1]?_esc(r[1]):"<span style='color:#8b949e'>"+_esc(d.lbl_unknown_relay)+"</span>";
+      if(r[4]>1) lbl+=" <span class='tag tag-orange'>"+_esc(d.lbl_ambiguous)+"</span>";
+      return "<tr><td class='mono'>"+_esc(r[0])+"</td><td>"+lbl+"</td><td>"+r[2]+"</td><td><div class='bar-bg'><div class='bar-fill' style='width:"
+        +r[3]+"%;background:#58a6ff'></div></div><span style='font-size:10px;color:#8b949e'>"+r[3]+"%</span></td></tr>"; }}).join('');
+    set('relay-sub', d.lbl_relay_hint);
+  }}
+  _applyFilter();
 }};
 </script>"""
         return self._base_html(tr("📏 Alcance & Links"), body)
@@ -1427,7 +1663,7 @@ window._metricsFilterTable = function(text) {{
             )
 
         body = f"""
-<div class="subtitle">{tr('Intervalo real entre pacotes recebidos de cada nó · {hora}', hora=d['now'])}</div>
+<div class="subtitle">{tr('Intervalo real entre pacotes recebidos de cada nó')}</div>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #8b949e;padding:8px 14px">
   <span style="color:#8b949e;font-size:11px">{tr('intervals_metric_info')}</span>
 </div>
@@ -1435,7 +1671,7 @@ window._metricsFilterTable = function(text) {{
   <h3>{tr('Intervalo Médio entre Pacotes por Nó')}</h3>
   <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
   <table>
-    <tr><th>ID</th><th>{tr('Nome')}</th><th>{tr('Média')}</th><th>Mín.</th><th>Máx.</th><th>{tr('Amostras')}</th><th>{tr('Frequência')}</th></tr>
+    <tr><th>ID</th><th>{tr('Nome')}</th><th>{tr('Média')}</th><th>{tr('Mín.')}</th><th>{tr('Máx.')}</th><th>{tr('Amostras')}</th><th>{tr('Frequência')}</th></tr>
     <tbody id="intervals-tbody" data-filterable="1">{rows_html}</tbody>
   </table>
   <div style="color:#8b949e;font-size:10px;margin-top:8px;padding-top:8px;border-top:1px solid #21262d">
@@ -1494,6 +1730,91 @@ window._metricsUpdateData = function(d) {{
 
 
     # ── Nó Local ─────────────────────────────────────────────────────────
+    def _html_radio_health(self) -> tuple:
+        """Blocos "Saúde do rádio" (LocalStats) e "Máquina" (HostMetrics) do
+        Nó Local. Devolve (html, js). A secção redesenha-se quando chega uma
+        amostra nova (ls_ts/host_ts na assinatura), por isso não há update."""
+        r = self._data_radio_health()
+
+        def color(val, warn, crit):
+            return "" if val is None else "green" if val < warn else "orange" if val < crit else "red"
+
+        def kpi(title, value, cls, sub):
+            return (f'<div class="card"><h3>{title}</h3><div class="kpi {cls}">{value}</div>'
+                    f'<div class="kpi-sub">{sub}</div></div>')
+
+        def fmt_pct(v):
+            return "—" if v is None else f"{v}%"
+
+        js = ""
+        if not r["has_stats"]:
+            radio = (f'<div class="card" style="margin-top:16px"><h3>{tr("📻 Saúde do Rádio (LocalStats)")}</h3>'
+                     f'<div style="color:#8b949e;font-size:12px;padding:14px 0;text-align:center">'
+                     f'{tr("⏳ O nó ainda não enviou LocalStats.")}<br>'
+                     f'<span style="font-size:11px">{tr("localstats_hint")}</span></div></div>')
+        else:
+            dl = r["delta"]
+            since = (tr("Últimos {m} min: +{rx} RX · +{tx} TX · +{d} repetidos · +{b} corrompidos",
+                        m=dl["minutes"], rx=dl["numPacketsRx"], tx=dl["numPacketsTx"],
+                        d=dl["numRxDupe"], b=dl["numPacketsRxBad"])
+                     if dl else tr("A variação aparece a partir do segundo envio."))
+            noise = r["noise"]
+            noise_cls = ("" if noise is None else "green" if noise < self.NOISE_WARN
+                         else "orange" if noise < self.NOISE_CRIT else "red")
+            radio = f"""
+<div class="card" style="margin-top:16px;border-left:4px solid #58a6ff">
+  <h3>{tr("📻 Saúde do Rádio (LocalStats)")} · {r["stats_at"]}</h3>
+  <div class="kpi-sub" style="margin-bottom:10px">{tr("Contadores do firmware desde o arranque do nó.")} {since}</div>
+  <div class="grid-3">
+    {kpi(tr("Repetidos recebidos"), fmt_pct(r["dupe_pct"]), color(r["dupe_pct"], self.DUPE_WARN, self.DUPE_CRIT),
+         tr("{d} de {rx} pacotes · muitos = retransmissões desnecessárias (ex.: demasiados ROUTER)", d=r["dupe"], rx=r["rx"]))}
+    {kpi(tr("Pacotes corrompidos"), fmt_pct(r["bad_pct"]), color(r["bad_pct"], self.BAD_WARN, self.BAD_CRIT),
+         tr("{b} de {rx} · ruído ou colisões no canal", b=r["rx_bad"], rx=r["rx"]))}
+    {kpi(tr("Ruído de fundo"), "—" if noise is None else f"{noise} dBm", noise_cls,
+         tr("Noise floor medido pelo rádio · mais baixo é melhor"))}
+  </div>
+  <div class="grid-3" style="margin-top:12px">
+    {kpi(tr("Relays"), r["relay"], "blue",
+         tr("{c} cancelados ({p}) — outro nó retransmitiu primeiro", c=r["relay_canceled"], p=fmt_pct(r["relay_cancel_pct"])))}
+    {kpi(tr("TX descartados"), r["dropped"], "red" if r["dropped"] else "green",
+         tr("{p} dos envios · fila cheia ou duty cycle", p=fmt_pct(r["drop_pct"])))}
+    {kpi(tr("Nós online"), f'{r["online"]} / {r["total"]}', "blue",
+         tr("Na NodeDB do nó (últimas 2 h / total)"))}
+  </div>
+  {'<div class="chart-wrap" style="margin-top:12px"><canvas id="noiseChart"></canvas></div>' if len(r["noise_ts_vals"]) > 1 else ''}
+</div>"""
+            if len(r["noise_ts_vals"]) > 1:
+                js = f"""
+window._noiseChart = new Chart(document.getElementById('noiseChart'), {{
+  type: 'line',
+  data: {{ labels: {json.dumps(r["noise_ts_labels"])},
+    datasets: [{{ label: '{tr("Ruído de fundo")} (dBm)', data: {json.dumps(r["noise_ts_vals"])},
+      borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.08)', fill: true, tension: 0.3, pointRadius: 2 }}] }},
+  options: {{ responsive: true, maintainAspectRatio: false,
+    scales: {{ y: {{ grid: {{ color: '#21262d' }}, ticks: {{ color: '#8b949e', callback: v => v + ' dBm' }} }},
+               x: {{ grid: {{ color: '#21262d' }}, ticks: {{ color: '#8b949e', maxTicksLimit: 8 }} }} }},
+    plugins: {{ legend: {{ labels: {{ color: '#8b949e', boxWidth: 12 }} }} }} }}
+}});"""
+
+        host = ""
+        if r["has_host"]:
+            load = r["host_load"]
+            disks = " · ".join(f"{v} GB" for v in r["host_disk_gb"] if v is not None) or "—"
+            up = r["host_uptime"]
+            up_txt = "—" if not up else f"{up // 86400}d {up % 86400 // 3600:02d}h"
+            host = f"""
+<div class="card" style="margin-top:16px">
+  <h3>{tr("🖥 Máquina do meshtasticd (HostMetrics)")} · {r["host_at"]}</h3>
+  <div class="grid-3">
+    {kpi(tr("Carga (1/5/15 min)"), f"{load[0]}", "green" if load[0] < 1 else "orange" if load[0] < 2 else "red",
+         f"{load[0]} · {load[1]} · {load[2]}")}
+    {kpi(tr("Memória livre"), "—" if r["host_mem_mb"] is None else f'{r["host_mem_mb"]} MB', "blue", tr("RAM disponível na máquina"))}
+    {kpi(tr("Disco livre"), disks.split(" · ")[0], "blue", tr("/ e restantes discos: {d}", d=disks) + f" · uptime {up_txt}")}
+  </div>
+  {f'<div class="kpi-sub" style="margin-top:8px">{r["host_user"]}</div>' if r["host_user"] else ''}
+</div>"""
+        return radio + host, js
+
     def _html_local_node(self) -> str:
         # Ecrã de espera — _WAITING_SECTIONS + _refresh_current fazem a transição
         # automaticamente quando set_local_node_id é chamado.
@@ -1561,14 +1882,16 @@ window._metricsUpdateData = function(d) {{
         if d['rtt_avg'] is not None:
             rtt_sub = f"{tr('RTT médio')}: {d['rtt_avg']}s · {tr('mediana')}: {d['rtt_med']}s"
 
+        radio_html, radio_js = self._html_radio_health()
+
         n_dc = len(self._local_dc_ts)
-        dc_chart_html_note = tr("Estimativa: airUtilTx × 6. Extrapolação de 10 min para 1 hora — válida em regime estacionário.")
+        dc_chart_html_note = tr("Valor do firmware (airUtilTx): % do tempo a transmitir na última hora.")
 
         if n_dc > 1:
             import json as _json
             ts_lbl = _json.dumps([self._ts_label(t) for t, _ in self._local_dc_ts])
             ts_val = _json.dumps([v for _, v in self._local_dc_ts])
-            lbl_dc_hist   = tr("Duty Cycle/h est. (%)")
+            lbl_dc_hist   = tr("Duty Cycle/h (%)")
             dc_chart_js = f"""
 window._dcChart = new Chart(document.getElementById('dcChart'), {{
   type: 'line',
@@ -1615,7 +1938,7 @@ window._dcChart = new Chart(document.getElementById('dcChart'), {{
 </div>"""
 
         body = f"""
-<div class="subtitle">{tr("Métricas e estado do nó local · {hora}", hora=d['now'])}</div>
+<div class="subtitle">{tr("Métricas e estado do nó local")}</div>
 
 <!-- Identificação -->
 <div class="card" style="margin-bottom:16px;border-left:4px solid #f0883e;padding:8px 14px;display:flex;gap:24px;flex-wrap:wrap">
@@ -1639,21 +1962,21 @@ window._dcChart = new Chart(document.getElementById('dcChart'), {{
   <div class="card"><h3>Ch. Util.</h3>
     <div id="ln-ch" class="kpi {ch_color}">{ch}%</div>
     <div class="kpi-sub">{tr("Canal observado pelo nó")}</div></div>
-  <div class="card"><h3>Air TX (10 min)</h3>
-    <div id="ln-air" class="kpi">{d['air_tx']}%</div>
-    <div class="kpi-sub">{tr("TX deste nó nos últimos 10 min")}</div></div>
+  <div class="card"><h3>{tr("Pacotes do nó local")}</h3>
+    <div id="ln-air" class="kpi blue">{d['local_tx_pkts']}</div>
+    <div class="kpi-sub">{tr("Pacotes deste nó vistos nesta sessão")}</div></div>
 </div>
 
 <!-- KPI duty cycle -->
 <div class="card" style="margin-top:16px">
-  <h3>{tr("Duty Cycle/h Estimado (airUtilTx × 6)")} — <span id="ln-dc-label" style="color:{'#39d353' if dc_color=='green' else '#f0883e' if dc_color=='orange' else '#f85149'}">{dc_label}</span></h3>
+  <h3>{tr("Duty Cycle/h (airUtilTx)")} — <span id="ln-dc-label" style="color:{'#39d353' if dc_color=='green' else '#f0883e' if dc_color=='orange' else '#f85149'}">{dc_label}</span></h3>
   <div style="display:flex;align-items:center;gap:16px;margin-top:8px">
     <div id="ln-dc" class="kpi {dc_color}" style="font-size:36px;min-width:80px">{dc}%</div>
     <div style="flex:1">
       <div class="bar-bg"><div class="bar-fill" id="ln-dc-bar" style="width:{dc_pct}%;background:{dc_bar_c}"></div></div>
       <div style="color:#8b949e;font-size:11px;margin-top:6px">
         {tr("Limite EU_868/EU_433: 10%/hora · Aviso: 7%/hora")}<br>
-        <i>{tr("Estimativa: airUtilTx (média 10 min) × 6. Precisa em regime estacionário; pode sobrestimar após burst de TX.")}</i>
+        <i>{tr("Valor do firmware (airUtilTx): % do tempo a transmitir na última hora.")}</i>
       </div>
     </div>
   </div>
@@ -1666,16 +1989,19 @@ window._dcChart = new Chart(document.getElementById('dcChart'), {{
     <div id="ln-snr-sub" class="kpi-sub">min {d['snr_rx_min'] if d['snr_rx_min'] is not None else '—'} · max {d['snr_rx_max'] if d['snr_rx_max'] is not None else '—'}<br>{d['n_snr_rx']} {tr("pacotes")}</div></div>
   <div class="card"><h3>{tr("Msgs Enviadas")}</h3>
     <div id="ln-sent" class="kpi blue">{d['msgs_sent']}</div>
-    <div id="ln-sent-sub" class="kpi-sub">ACK: {d['msgs_acked']} · NAK: {d['msgs_naked']} · Relay: {d['msgs_implicit']}</div></div>
-  <div class="card"><h3>{tr("Taxa Entrega")}</h3>
+    <div id="ln-sent-sub" class="kpi-sub">ACK: {d['msgs_acked']} · NAK: {d['msgs_naked']} · Relay: {d['msgs_implicit']} · {tr("Pend.")}: {d['msgs_pending']}</div></div>
+  <div class="card"><h3>{tr("Taxa Entrega (DMs)")}</h3>
     <div id="ln-delivery" class="kpi {dr_color}">{delivery if delivery is not None else '—'}{'%' if delivery is not None else ''}</div>
     <div id="ln-rtt-sub" class="kpi-sub">{rtt_sub}</div></div>
 </div>
+
+{radio_html}
 
 {dc_chart_html}
 
 <script>
 {dc_chart_js}
+{radio_js}
 </script>
 <script>
 // Uptime live — actualizado a cada segundo independentemente do refresh Python
@@ -1734,7 +2060,7 @@ window._metricsUpdateData = function(d) {{
   var ch = d.ch_util;
   set('ln-ch', ch !== undefined ? ch + '%' : '\u2014');
   setClass('ln-ch', ch<25?'green':ch<50?'orange':'red');
-  set('ln-air', d.air_tx !== undefined ? d.air_tx + '%' : '\u2014');
+  set('ln-air', d.local_tx_pkts !== undefined ? d.local_tx_pkts : '\u2014');
 
   // Duty cycle
   var dc = d.dc_est;
@@ -1754,11 +2080,11 @@ window._metricsUpdateData = function(d) {{
   set('ln-snr', snr !== null && snr !== undefined ? snr + ' dB' : '\u2014');
   setClass('ln-snr', snr===null?'':snr>=5?'green':snr>=0?'orange':'red');
   var pkt = d.lbl_packets || 'packets';
-  set('ln-snr-sub', 'min '+(d.snr_rx_min!==null?d.snr_rx_min:'\u2014')+' \u00b7 max '+(d.snr_rx_max!==null?d.snr_rx_max:'\u2014')+'\n'+d.n_snr_rx+' '+pkt);
+  set('ln-snr-sub', 'min '+(d.snr_rx_min!==null?d.snr_rx_min:'\u2014')+' \u00b7 max '+(d.snr_rx_max!==null?d.snr_rx_max:'\u2014')+' \u00b7 '+d.n_snr_rx+' '+pkt);
 
   // TX/msgs
   set('ln-sent', d.msgs_sent);
-  set('ln-sent-sub', 'ACK: '+d.msgs_acked+' \u00b7 NAK: '+d.msgs_naked+' \u00b7 Relay: '+d.msgs_implicit);
+  set('ln-sent-sub', 'ACK: '+d.msgs_acked+' \u00b7 NAK: '+d.msgs_naked+' \u00b7 Relay: '+d.msgs_implicit+' \u00b7 '+(d.lbl_pend||'Pend.')+': '+d.msgs_pending);
   var del = d.delivery;
   set('ln-delivery', del !== null ? del + '%' : '\u2014');
   setClass('ln-delivery', del===null?'':del>=90?'green':del>=70?'orange':'red');
@@ -1777,9 +2103,8 @@ window._metricsUpdateData = function(d) {{
     window._dcChart.data.datasets[2].data = Array(n).fill(7);
     window._dcChart.update('none');
   }}
-  set('ln-updated', d.now);
 }};
 </script>
-<div class="updated" id="ln-updated">{tr("Actualizado:")} {d['now']}</div>
+
 """
         return self._base_html(tr("🏠 Nó Local"), body)

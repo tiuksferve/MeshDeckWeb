@@ -593,10 +593,10 @@ class MainWindow(QMainWindow):
             lambda req_id, status, detail: self.metrics_tab.ingest_message_status(req_id, status)
         )
         self.worker.channel_message_sent.connect(
-            lambda ch, text, pid: self.metrics_tab.ingest_message_sent(pid)
+            lambda ch, text, pid: self.metrics_tab.ingest_message_sent(pid, kind='channel')
         )
         self.worker.dm_sent.connect(
-            lambda dest, text, pki, pid: self.metrics_tab.ingest_message_sent(pid)
+            lambda dest, text, pki, pid: self.metrics_tab.ingest_message_sent(pid, kind='dm')
         )
         self.worker.message_received.connect(self.messages_tab.add_message)
         self.worker.nodedb_reset.connect(self._on_nodedb_reset)
@@ -762,6 +762,8 @@ class MainWindow(QMainWindow):
             was_new = self.source_model.update_node_silent(nid, data)
             if was_new:
                 new_nodes.append((nid, data))
+            # Posições, bateria e nomes da NodeDB também para as métricas.
+            self.metrics_tab.ingest_packet(None, data, nid)
 
             # Local GPS: only update once per batch (most recent entry wins)
             local_id = getattr(self, '_local_node_id_str', None)
@@ -848,7 +850,7 @@ class MainWindow(QMainWindow):
         """Alimenta a MetricsTab. Se houver pacote, o raw_packet_received já tratou."""
         if packet is None:
             # Batch inicial ou update sem pacote (ex: nó local via _emit_node).
-            self.metrics_tab.ingest_packet(None, node_data)
+            self.metrics_tab.ingest_packet(None, node_data, node_id_string)
 
     def _on_worker_error(self, message: str):
         QMessageBox.critical(self, tr("Erro no Meshtastic"), message)
@@ -1738,6 +1740,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if self.worker:
             self.worker.stop()
+        self._console_window.detach()
         event.accept()
 
 
