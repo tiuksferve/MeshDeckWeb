@@ -361,7 +361,7 @@ def get_section_label(key: str) -> str:
         "moduleConfig.remotehardware":     "🔧 Hardware Remoto",
         "moduleConfig.neighborInfo":       "🔗 Neighbor Info",
         "moduleConfig.ambientLighting":    "💡 Ilum. Ambiente",
-        "moduleConfig.detectionSensor":    "🔍 Sensor Deteccao",
+        "moduleConfig.detectionSensor":    "🔍 Sensor de Detecção",
         "moduleConfig.paxcounter":         "🧮 Paxcounter",
         "localConfig.security":            "🔐 Segurança",
         "moduleConfig.trafficManagement":  "🚦 Gestão de Tráfego",

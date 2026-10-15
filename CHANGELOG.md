@@ -18,7 +18,8 @@ desktop application is removed.
   - `run_server.py` with Flask + Socket.IO; any number of browsers stay in sync
     in real time.
   - Password login (generated on first run, `--set-password` to change it),
-    remembered per browser.
+    remembered per browser; after 5 failed attempts in 15 minutes an address
+    is locked out for 1 minute, doubling up to 15 minutes.
   - Responsive interface designed for the iPhone, also used on desktop browsers.
   - Node list as cards or a compact table, map, messages, navigation,
     traceroute, metrics and full node configuration, in English and Português.
@@ -94,7 +95,8 @@ desktop application is removed.
     real duplicates come from LocalStats.
   - Local Node script broken by a raw newline, which stopped its live uptime.
 - **🌐 Translations:** texts that stayed in Portuguese with English selected,
-  including server and configuration errors.
+  including server and configuration errors; chart legends that stayed in
+  English with Portuguese selected; "Sensor de Detecção" spelling.
 
 ### Removed
 

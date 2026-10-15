@@ -405,3 +405,26 @@ def test_metric_pages_load_no_external_scripts(metrics):
         page = metrics.html_for(key)
         assert not re.search(r"""<script[^>]+src=["']https?://""", page), key
         assert "/vendor/chart.umd.min.js" in page, key
+
+
+@pytest.mark.parametrize("lang, expected, absent", [
+    ("pt", ["Limite UE (10%)", "Aviso (7%)", "Utilização do canal (%)"], ["EU limit", "Warning (7%)", "Ch. Utilization"]),
+    ("en", ["EU limit (10%)", "Warning (7%)", "Channel utilisation (%)"], ["Limite UE", "Aviso (7%)"]),
+])
+def test_chart_legends_follow_the_language(metrics, lang, expected, absent):
+    """As legendas dos gráficos são desenhadas no canvas: não aparecem no
+    texto da página, por isso uma verificação visual não as apanha."""
+    import i18n
+    previous = i18n.get_language()
+    i18n.set_language(lang)
+    try:
+        for i in range(3):
+            metrics.ingest_raw_packet(packet("TELEMETRY_APP", LOCAL_NUM, decoded={"telemetry": {
+                "deviceMetrics": {"airUtilTx": 1.0 + i, "channelUtilization": 10.0 + i}}}))
+        pages = metrics.html_for("channel") + metrics.html_for("local_node")
+    finally:
+        i18n.set_language(previous)
+    for text in expected:
+        assert text in pages, text
+    for text in absent:
+        assert text not in pages, text

@@ -27,7 +27,8 @@ from i18n import get_language, tr
 from server import events as ev
 from server import tls
 from server.tile_cache import TileCache
-from server.auth import ServerConfig, is_authenticated, login, login_required, logout
+from server.auth import (LoginThrottle, ServerConfig, is_authenticated, login, login_required,
+                         logout)
 from server.bridge_manager import list_serial_ports
 from server.session import ConfigBusy, ConfigUnavailable, MeshSession
 
@@ -149,14 +150,34 @@ def create_app(config: ServerConfig = None) -> tuple:
     # ------------------------------------------------------------------
     # Autenticação
     # ------------------------------------------------------------------
+    throttle = LoginThrottle()
+    app.login_throttle = throttle
+
+    def too_many(seconds: int):
+        response = jsonify({"error": tr("Demasiadas tentativas falhadas. Tente de novo dentro de {n} s.",
+                                        n=seconds), "retry_after": seconds})
+        response.status_code = 429
+        response.headers["Retry-After"] = str(seconds)
+        return response
+
     @app.post("/api/login")
     def api_login():
+        ip = request.remote_addr or "?"
+        # Bloqueado: responde já, sem sequer verificar a password.
+        wait = throttle.retry_after(ip)
+        if wait:
+            return too_many(wait)
         payload = request.get_json(silent=True) or {}
         if not config.check_password(payload.get("password", "")):
-            logger.warning("tentativa de login falhada de %s", request.remote_addr)
+            logger.warning("tentativa de login falhada de %s", ip)
+            locked = throttle.failure(ip)
+            if locked:
+                logger.warning("login bloqueado durante %d s para %s (demasiadas tentativas)", locked, ip)
+                return too_many(locked)
             return jsonify({"error": tr("err_bad_login")}), 401
+        throttle.success(ip)
         login(remember=bool(payload.get("remember", True)))
-        logger.info("login de %s", request.remote_addr)
+        logger.info("login de %s", ip)
         return jsonify({"ok": True})
 
     @app.post("/api/logout")

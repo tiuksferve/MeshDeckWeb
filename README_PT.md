@@ -19,6 +19,23 @@ igualmente bem num browser de computador.
 
 ---
 
+## 📸 Capturas de Ecrã
+
+<p align="center">
+  <img src="docs/screenshots/pt/phone-nodes.png" width="160" alt="Nós" title="Nós">
+  <img src="docs/screenshots/pt/phone-map.png" width="160" alt="Mapa com um traceroute" title="Mapa com um traceroute">
+  <img src="docs/screenshots/pt/phone-messages.png" width="160" alt="Canal com uma resposta" title="Canal com uma resposta">
+  <img src="docs/screenshots/pt/phone-navigation.png" width="160" alt="Bússola e nós com GPS" title="Bússola e nós com GPS">
+  <img src="docs/screenshots/pt/phone-metrics.png" width="160" alt="Métricas de qualidade RF" title="Métricas de qualidade RF">
+</p>
+<p align="center">
+  <img src="docs/screenshots/pt/desktop-nodes.png" width="32%" alt="Cartões dos nós no computador" title="Cartões dos nós no computador">
+  <img src="docs/screenshots/pt/desktop-metrics.png" width="32%" alt="Métricas do nó local" title="Métricas do nó local">
+  <img src="docs/screenshots/pt/desktop-map.png" width="32%" alt="Mapa e traceroutes" title="Mapa e traceroutes">
+</p>
+
+---
+
 ## 🚀 Funcionalidades
 
 ### 📋 Nós
@@ -92,6 +109,8 @@ Os gráficos actualizam-se em tempo real, sem recarregar a página.
 ### 🔐 Acesso e Idiomas
 
 - Login com password; a sessão pode ficar lembrada em cada browser
+- Protecção contra tentativas de adivinhar a password: ao fim de 5 falhas o
+  endereço fica bloqueado durante algum tempo (1 minuto, a dobrar até 15)
 - Vários dispositivos ao mesmo tempo, todos sincronizados em tempo real
 - Português e English, escolhidos no menu ☰
 
@@ -305,6 +324,7 @@ meshdeck/
 ├── i18n.py                ← Traduções PT/EN
 ├── constants.py           ← Versão e cores
 ├── meshtastic_bridge.py   ← Ponte série USB → TCP
+├── docs/screenshots/      ← Imagens dos READMEs (en/pt)
 ├── tests/                 ← Testes (pytest)
 └── requirements.txt
 ```

@@ -363,7 +363,7 @@ window._chChart = new Chart(document.getElementById('chChart'), {{
   data: {{
     labels: {json.dumps(ts_labels)},
     datasets: [
-      {{ label: 'Ch. Utilization (%)', data: {json.dumps(ts_vals)},
+      {{ label: '{tr("Utilização do canal (%)")}', data: {json.dumps(ts_vals)},
          borderColor: '#39d353', backgroundColor: 'rgba(57,211,83,0.08)',
          fill: true, tension: 0.3, pointRadius: 2 }},
       {{ label: '{tr("Limite óptimo (25%)")}'  , data: Array({n_ts}).fill(25),
@@ -1904,9 +1904,9 @@ window._dcChart = new Chart(document.getElementById('dcChart'), {{
       {{ label: '{lbl_dc_hist}', data: {ts_val},
          borderColor: '#f0883e', backgroundColor: 'rgba(240,136,62,0.08)',
          fill: true, tension: 0.3, pointRadius: 2 }},
-      {{ label: 'EU limit (10%)', data: Array({n_dc}).fill(10),
+      {{ label: '{tr("Limite UE (10%)")}', data: Array({n_dc}).fill(10),
          borderColor: '#f85149', borderDash: [4,4], pointRadius: 0, fill: false }},
-      {{ label: 'Warning (7%)', data: Array({n_dc}).fill(7),
+      {{ label: '{tr("Aviso (7%)")}', data: Array({n_dc}).fill(7),
          borderColor: '#f0883e', borderDash: [4,4], pointRadius: 0, fill: false }},
     ]
   }},

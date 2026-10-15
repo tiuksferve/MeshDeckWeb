@@ -701,3 +701,49 @@ def test_nodedb_batch_feeds_the_metrics(server):
     assert m._node_pos[PEER_ID] == (38.7, -9.1)
     assert m._battery[PEER_ID] == 64 and m._name(PEER_ID) == "P1"
     assert m._packets == []          # não é tráfego: não conta como pacote
+
+
+# ── protecção do login ───────────────────────────────────────────────────────
+
+def test_login_throttle_locks_after_repeated_failures_and_doubles():
+    from server.auth import LoginThrottle
+    now = [1000.0]
+    th = LoginThrottle(clock=lambda: now[0])
+    for _ in range(LoginThrottle.MAX_FAILURES - 1):
+        assert th.failure("10.0.0.5") == 0
+    assert th.failure("10.0.0.5") == 60                 # 5.ª falha: 1 min
+    assert th.retry_after("10.0.0.5") == 60
+    assert th.retry_after("10.0.0.6") == 0              # outros endereços não são afectados
+    now[0] += 61
+    assert th.retry_after("10.0.0.5") == 0
+    for _ in range(LoginThrottle.MAX_FAILURES):
+        locked = th.failure("10.0.0.5")
+    assert locked == 120                                # bloqueio seguinte: o dobro
+    th.success("10.0.0.5")
+    assert th.retry_after("10.0.0.5") == 0
+
+
+def test_login_throttle_forgets_old_failures():
+    from server.auth import LoginThrottle
+    now = [0.0]
+    th = LoginThrottle(clock=lambda: now[0])
+    for _ in range(LoginThrottle.MAX_FAILURES - 1):
+        th.failure("ip")
+    now[0] += LoginThrottle.WINDOW_S + 1                # as falhas antigas expiram
+    assert th.failure("ip") == 0
+
+
+def test_login_route_blocks_guessing_even_with_the_right_password(server):
+    client = server["client"]
+    now = [5000.0]
+    server["app"].login_throttle._clock = lambda: now[0]
+    for _ in range(4):
+        assert client.post("/api/login", json={"password": "errada!!"}).status_code == 401
+    blocked = client.post("/api/login", json={"password": "errada!!"})
+    assert blocked.status_code == 429 and blocked.headers["Retry-After"] == "60"
+    assert "60" in blocked.get_json()["error"]
+    # Durante o bloqueio nem a password certa entra (não é sequer verificada).
+    assert client.post("/api/login", json={"password": server["password"]}).status_code == 429
+    now[0] += 61
+    assert login(server).status_code == 200
+    assert client.get("/api/state").status_code == 200

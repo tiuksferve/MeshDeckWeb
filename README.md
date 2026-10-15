@@ -19,6 +19,23 @@ well on a desktop browser.
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/en/phone-nodes.png" width="160" alt="Nodes" title="Nodes">
+  <img src="docs/screenshots/en/phone-map.png" width="160" alt="Map with a traceroute" title="Map with a traceroute">
+  <img src="docs/screenshots/en/phone-messages.png" width="160" alt="Channel with a reply" title="Channel with a reply">
+  <img src="docs/screenshots/en/phone-navigation.png" width="160" alt="Compass and GPS nodes" title="Compass and GPS nodes">
+  <img src="docs/screenshots/en/phone-metrics.png" width="160" alt="RF quality metrics" title="RF quality metrics">
+</p>
+<p align="center">
+  <img src="docs/screenshots/en/desktop-nodes.png" width="32%" alt="Node cards on desktop" title="Node cards on desktop">
+  <img src="docs/screenshots/en/desktop-metrics.png" width="32%" alt="Local node metrics" title="Local node metrics">
+  <img src="docs/screenshots/en/desktop-map.png" width="32%" alt="Map and traceroutes" title="Map and traceroutes">
+</p>
+
+---
+
 ## 🚀 Features
 
 ### 📋 Nodes
@@ -92,6 +109,8 @@ Charts update live, without reloading the page.
 ### 🔐 Access and Languages
 
 - Password login; the session can be remembered per browser
+- Protection against password guessing: after 5 failed attempts the address
+  is locked out for a while (1 minute, doubling up to 15)
 - Several devices at once, all in sync in real time
 - English and Português, chosen in the ☰ menu
 
@@ -301,6 +320,7 @@ meshdeck/
 ├── i18n.py                ← PT/EN translations
 ├── constants.py           ← Version and colours
 ├── meshtastic_bridge.py   ← USB-to-TCP serial bridge
+├── docs/screenshots/      ← README images (en/pt)
 ├── tests/                 ← pytest suite
 └── requirements.txt
 ```

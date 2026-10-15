@@ -14,8 +14,10 @@ caminhos de certificado para servir por TLS.
 """
 
 import logging
+import math
 import os
 import secrets
+import threading
 import time
 from functools import wraps
 
@@ -194,6 +196,57 @@ class ServerConfig:
             return False
         self._store_targets(kept)
         return True
+
+
+class LoginThrottle:
+    """Trava tentativas repetidas de adivinhar a password, por endereço IP.
+
+    Quem entra pode reconfigurar o nó, por isso a password não pode ser
+    testada sem limite a partir da rede. Ao fim de MAX_FAILURES falhas dentro
+    de WINDOW_S, o endereço fica bloqueado LOCK_S segundos; cada novo bloqueio
+    seguido dobra o tempo, até MAX_LOCK_S. Um login certo limpa o histórico.
+    Em memória: reiniciar o servidor também limpa (aceitável numa LAN).
+    """
+
+    MAX_FAILURES = 5
+    WINDOW_S = 15 * 60
+    LOCK_S = 60
+    MAX_LOCK_S = 15 * 60
+
+    def __init__(self, clock=time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._state = {}     # ip -> {"fails": [ts…], "until": ts, "locks": n}
+
+    def retry_after(self, ip: str) -> int:
+        """Segundos até poder tentar outra vez (0 = pode tentar já)."""
+        with self._lock:
+            st = self._state.get(ip)
+            if not st:
+                return 0
+            return max(0, math.ceil(st["until"] - self._clock()))
+
+    def failure(self, ip: str) -> int:
+        """Regista uma falha; devolve os segundos de bloqueio que começam agora (ou 0)."""
+        now = self._clock()
+        with self._lock:
+            st = self._state.setdefault(ip, {"fails": [], "until": 0.0, "locks": 0})
+            st["fails"] = [t for t in st["fails"] if now - t < self.WINDOW_S] + [now]
+            if len(st["fails"]) < self.MAX_FAILURES:
+                return 0
+            seconds = min(self.LOCK_S * 2 ** st["locks"], self.MAX_LOCK_S)
+            st["locks"] += 1
+            st["until"] = now + seconds
+            st["fails"] = []
+            # Esquece endereços parados há muito, para a tabela não crescer.
+            for other in [k for k, v in self._state.items()
+                          if k != ip and not v["fails"] and v["until"] < now - self.WINDOW_S]:
+                del self._state[other]
+            return seconds
+
+    def success(self, ip: str):
+        with self._lock:
+            self._state.pop(ip, None)
 
 
 def is_authenticated() -> bool:
