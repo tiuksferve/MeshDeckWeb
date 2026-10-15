@@ -12,10 +12,10 @@ well on a desktop browser.
 
 **Version:** 2.0.0-beta &nbsp;·&nbsp; **Callsign:** CT7BRA &nbsp;·&nbsp; **Year:** 2026
 
-> MeshDeckWeb replaces the original PyQt5 desktop application (MeshDeck 1.x).
-> The node logic, the configuration pipeline and the metrics were kept and
-> moved to a shared core; the desktop window is gone. See the
-> [CHANGELOG](CHANGELOG.md).
+> MeshDeckWeb is the web successor of [MeshDeck](https://github.com/tiuksferve/MeshDeck),
+> the PyQt5 desktop application (1.x). The node logic, the configuration
+> pipeline and the metrics came from it and moved to a shared core; the
+> desktop window is gone. See the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -122,8 +122,8 @@ Charts update live, without reloading the page.
 (`meshtasticd` or a Wi-Fi node) or connected by USB.
 
 ```bash
-git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
-cd meshdeck
+git clone https://github.com/tiuksferve/MeshDeckWeb.git meshdeckweb
+cd meshdeckweb
 python3 install.py          # on Windows: py install.py
 ```
 
@@ -160,8 +160,8 @@ installed is reused.
 If you prefer to do it by hand:
 
 ```bash
-git clone https://github.com/tiuksferve/MeshDeck.git meshdeck
-cd meshdeck
+git clone https://github.com/tiuksferve/MeshDeckWeb.git meshdeckweb
+cd meshdeckweb
 python3 -m venv .venv
 source .venv/bin/activate          # on Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -311,7 +311,7 @@ list view) stay in each browser.
 ## 📁 Project Structure
 
 ```
-meshdeck/
+meshdeckweb/
 ├── install.py             ← Guided setup (venv, password, node, HTTPS, offline map, start shortcut)
 ├── run_server.py          ← Entry point and command-line options
 ├── server/                ← Flask + Socket.IO: HTTP API, login, HTTPS, serial bridge

@@ -26,6 +26,8 @@ import urllib.request
 logger = logging.getLogger("MeshDeck.tiles")
 
 UPSTREAM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+# Contacto para os operadores do OSM: o MeshDeck original é público
+# (o repositório do MeshDeckWeb é privado e daria 404 a quem o abrisse).
 USER_AGENT = "MeshDeckWeb/2.0 (+https://github.com/tiuksferve/MeshDeck)"
 MAX_ZOOM = 19
 REFRESH_AFTER_S = 30 * 86400     # mais velho do que isto: tenta actualizar

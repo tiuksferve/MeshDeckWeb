@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to **MeshDeck** are documented in this file.  
+All notable changes to **MeshDeckWeb** — and to **MeshDeck** 1.x, the desktop
+application it grew from — are documented in this file.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -481,6 +482,7 @@ First public release.
 > (ClockworkPi uConsole CM4) with a live Meshtastic network. Expect occasional
 > rough edges; bug reports and pull requests are welcome.
 
+[2.0.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.0.0-beta
 [1.0.5-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.5-beta
 [1.0.4-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.4-beta
 [1.0.3-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.3-beta
