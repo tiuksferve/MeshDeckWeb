@@ -7,6 +7,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **🧪 Browser tests** under `tests/ui/`: a headless Chromium drives the real
+  interface against a server with simulated nodes, messages and metrics —
+  login, every tab on desktop and phone sizes, map (markers, cached tiles,
+  legend, satellite labels, offline map, side sheet), device compass,
+  messages and replies, all metric sections and charts, node configuration
+  and the language switch. Any JavaScript error fails the test. Skipped when
+  no Chromium/Chrome is installed; `pytest -m "not ui"` leaves them out.
+
+### Changed
+
+- **🎨 Colour thresholds tuned with 22 h of real data** (a mesh of 200+
+  nodes on LongFast):
+  - **SNR colours follow the node's preset.** They measure the margin above
+    the lowest SNR the radio still decodes (−17.5 dB on LongFast, −7.5 dB on
+    ShortFast): green from 10 dB of margin, orange from 5 dB. Before, −8 dB
+    was red on every preset, which painted 93% of LongFast packets red. The
+    server reads the spreading factor from the connected node and sends the
+    scale to the browser, so nodes list, navigation, overview, RF quality,
+    local node, range and the "weak signal" diagnosis all agree.
+  - **Packet intervals:** red now marks chatty nodes (under 1 min), orange
+    under 5 min; the usual 15–30 min telemetry is green. It was the reverse.
+  - **Hop limit exhausted:** orange from 20%, red from 40% (was 5% / 15%).
+    The hint now points at the node's position in the mesh instead of
+    suggesting a higher hop limit.
+  - **Repeated packets (LocalStats):** orange from 80%, red from 90%
+    (was 40% / 70%) — in a dense mesh every packet arrives through several
+    relayers, and a better antenna hears even more copies.
+  - Corrupted packets and noise floor keep their thresholds: they depend on
+    where the antenna is and should keep pointing at a poor location.
+
+---
+
 ## [2.0.0-beta] — 2026-10-14
 
 MeshDeck becomes **MeshDeckWeb**: a Python server keeps the connection to the

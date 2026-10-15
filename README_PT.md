@@ -333,8 +333,17 @@ Para correr os testes:
 
 ```bash
 pip install pytest
-python3 -m pytest
+python3 -m pytest                 # todos (cerca de 1 min num uConsole CM4)
+python3 -m pytest -m "not ui"     # sem os testes no browser
 ```
+
+Os testes em `tests/ui/` abrem a interface real num Chromium ou Chrome
+headless, com nós, mensagens e métricas simulados e sem internet: login,
+todas as abas em tamanho de computador e de telemóvel, mapa, bússola,
+mensagens, as 12 secções de métricas, configuração do nó e mudança de idioma.
+São saltados se não houver Chromium/Chrome instalado
+(`MESHDECK_BROWSER=/caminho/do/browser` escolhe um). Um teste que falhe deixa
+uma captura em `.pytest_cache/ui-failures/`.
 
 ---
 

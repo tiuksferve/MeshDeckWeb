@@ -57,7 +57,74 @@ _HOST_FIELDS = ("uptimeSeconds", "freememBytes", "diskfree1Bytes", "diskfree2Byt
                 "diskfree3Bytes", "load1", "load5", "load15")
 
 
+# SNR mínimo que o LoRa ainda descodifica, por spreading factor (datasheets
+# Semtech SX126x/SX127x): −7,5 dB em SF7 e menos 2,5 dB por cada SF acima.
+# As cores do SNR medem a margem até esse limite, por isso dependem do preset:
+# −8 dB é confortável em LongFast (SF11) e quase inaudível em ShortFast (SF7).
+PRESET_SPREADING_FACTOR = {
+    "SHORT_TURBO": 7, "SHORT_FAST": 7, "SHORT_SLOW": 8, "MEDIUM_FAST": 9,
+    "MEDIUM_SLOW": 10, "LONG_TURBO": 11, "LONG_FAST": 11, "LONG_MODERATE": 11,
+    "LONG_SLOW": 12, "VERY_LONG_SLOW": 12,
+}
+DEFAULT_SPREADING_FACTOR = 11       # LONG_FAST, o preset de fábrica
+SNR_MARGIN_EXCELLENT_DB = 15.0      # margem acima do limite de descodificação
+SNR_MARGIN_GOOD_DB = 10.0
+SNR_MARGIN_FAIR_DB = 5.0            # abaixo disto: perto de perder pacotes
+
+
+def snr_floor_db(spreading_factor: int) -> float:
+    return -7.5 - 2.5 * (spreading_factor - 7)
+
+
+def spreading_factor_of(lora) -> int:
+    """SF em uso a partir do LoRaConfig (protobuf ou dict com os mesmos nomes).
+    Com preset, o preset manda; o campo spread_factor só vale sem preset ou
+    para presets que esta tabela ainda não conhece."""
+    def field(name):
+        return lora.get(name) if isinstance(lora, dict) else getattr(lora, name, None)
+    if lora is None:
+        return DEFAULT_SPREADING_FACTOR
+    preset = field("modem_preset")
+    if not isinstance(preset, str) and preset is not None:
+        try:
+            from meshtastic.protobuf import config_pb2
+            preset = config_pb2.Config.LoRaConfig.ModemPreset.Name(int(preset))
+        except (ImportError, ValueError):
+            preset = None
+    use_preset = field("use_preset")
+    if use_preset is not False and preset in PRESET_SPREADING_FACTOR:
+        return PRESET_SPREADING_FACTOR[preset]
+    sf = field("spread_factor")
+    if isinstance(sf, int) and 7 <= sf <= 12:
+        return sf
+    return DEFAULT_SPREADING_FACTOR
+
+
 class MetricsDataMixin:
+    spreading_factor = DEFAULT_SPREADING_FACTOR
+
+    def set_spreading_factor(self, spreading_factor: int) -> bool:
+        """Muda a escala do SNR; devolve True se mudou."""
+        sf = spreading_factor if 7 <= int(spreading_factor) <= 12 else DEFAULT_SPREADING_FACTOR
+        changed = sf != self.spreading_factor
+        self.spreading_factor = sf
+        return changed
+
+    @property
+    def snr_levels(self) -> dict:
+        """Limiares de SNR (dB) para o preset actual: verde ≥ good, laranja ≥ fair."""
+        floor = snr_floor_db(self.spreading_factor)
+        return {"floor": floor, "excellent": floor + SNR_MARGIN_EXCELLENT_DB,
+                "good": floor + SNR_MARGIN_GOOD_DB, "fair": floor + SNR_MARGIN_FAIR_DB,
+                "spreading_factor": self.spreading_factor}
+
+    def snr_color(self, snr) -> str:
+        """'green', 'orange', 'red' ou '' (sem valor)."""
+        if snr is None:
+            return ""
+        levels = self.snr_levels
+        return "green" if snr >= levels["good"] else "orange" if snr >= levels["fair"] else "red"
+
 
     def _reset_data(self):
         self._start_time = time.time()
@@ -581,8 +648,13 @@ class MetricsDataMixin:
             "now": self._now_str(),
         }
 
-    # Limiares indicativos da saúde do rádio (LocalStats).
-    DUPE_WARN, DUPE_CRIT = 40.0, 70.0     # % de RX que eram repetições
+    # Limiares indicativos da saúde do rádio (LocalStats), revistos com 22 h
+    # de dados reais (rede de mais de 200 nós, LongFast, nó mal posicionado).
+    # Repetidos: numa rede densa cada pacote chega por vários retransmissores
+    # (66 % ≈ 3 cópias) e uma antena melhor ouve ainda mais cópias, por isso
+    # só 80 % (5 cópias) é aviso. Corrompidos e ruído dependem do local da
+    # antena; ficam exigentes para continuarem a apontar uma má posição.
+    DUPE_WARN, DUPE_CRIT = 80.0, 90.0     # % de RX que eram repetições
     BAD_WARN, BAD_CRIT   = 5.0, 15.0      # % de RX corrompidos (ruído/colisões)
     NOISE_WARN, NOISE_CRIT = -105, -95    # dBm: acima disto o ruído de fundo é alto
 
@@ -778,18 +850,25 @@ class MetricsDataMixin:
         if snr_avg is None or not self._snr_values:
             return tr("⏳ Aguardando dados suficientes para avaliação...")
         n = len(self._snr_values)
-        pct_exc  = round(sum(1 for v in self._snr_values if v >= 8)     / n * 100)
-        pct_good = round(sum(1 for v in self._snr_values if 5 <= v < 8) / n * 100)
-        pct_marg = round(sum(1 for v in self._snr_values if 0 <= v < 5) / n * 100)
-        pct_weak = round(sum(1 for v in self._snr_values if v < 0)      / n * 100)
+        lv = self.snr_levels
+        exc, good, fair = lv["excellent"], lv["good"], lv["fair"]
+        pct_exc  = round(sum(1 for v in self._snr_values if v >= exc)         / n * 100)
+        pct_good = round(sum(1 for v in self._snr_values if good <= v < exc)  / n * 100)
+        pct_marg = round(sum(1 for v in self._snr_values if fair <= v < good) / n * 100)
+        pct_weak = round(sum(1 for v in self._snr_values if v < fair)         / n * 100)
         pct_ok   = pct_exc + pct_good
+        scale_note = tr("Escala para SF{sf}: o rádio ainda descodifica até {floor} dB de SNR.",
+                        sf=lv["spreading_factor"], floor=f"{lv['floor']:g}")
         lines = []
         lines.append(
             f"<b>{tr('Distribuição de qualidade em {n} pacotes:', n=n)}</b> "
-            f"<span style='color:#39d353'>{pct_exc}% {tr('excelente')} (≥8dB)</span> · "
-            f"<span style='color:#56d364'>{pct_good}% {tr('bom')} (5–8dB)</span> · "
-            f"<span style='color:#f0883e'>{pct_marg}% {tr('marginal')} (0–5dB)</span> · "
-            f"<span style='color:#f85149'>{pct_weak}% {tr('fraco')} (&lt;0dB)</span>"
+            f"<span style='color:#39d353'>{pct_exc}% {tr('excelente')} (≥{exc:g} dB)</span> · "
+            f"<span style='color:#56d364'>{pct_good}% {tr('bom')} (≥{good:g} dB)</span> · "
+            f"<span style='color:#f0883e'>{pct_marg}% {tr('marginal')} (≥{fair:g} dB)</span> · "
+            f"<span style='color:#f85149'>{pct_weak}% {tr('fraco')} (&lt;{fair:g} dB)</span>"
+            f"<br><span style='color:#8b949e;font-size:11px'>"
+            f"{scale_note}"
+            f"</span>"
         )
         if pct_ok >= 80:
             lines.append(tr("✅ Rede em excelentes condições RF. A grande maioria dos pacotes chega com sinal forte."))
@@ -800,8 +879,8 @@ class MetricsDataMixin:
         else:
             lines.append(tr("🚨 Qualidade RF fraca."))
         if snr_p10 is not None:
-            if snr_p10 < -10: lines.append(tr("⚠️ Pior decil SNR fraco", snr_p10=snr_p10))
-            elif snr_p10 < 0: lines.append(tr("ℹ️ Pior decil SNR marginal", snr_p10=snr_p10))
+            if snr_p10 < fair:   lines.append(tr("⚠️ Pior decil SNR fraco", snr_p10=snr_p10))
+            elif snr_p10 < good: lines.append(tr("ℹ️ Pior decil SNR marginal", snr_p10=snr_p10))
             else:             lines.append(tr("✅ Pior decil SNR ok", snr_p10=snr_p10))
         if hops_values:
             avg_hops   = sum(hops_values) / len(hops_values)
@@ -814,7 +893,7 @@ class MetricsDataMixin:
             if self._hop_measured >= 20:
                 exh = self._hop_exhausted / self._hop_measured * 100
                 if exh >= self.HOP_EXHAUSTED_WARN:
-                    lines.append(tr("⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: nós mais longe podem não estar a ser ouvidos. Considere aumentar o hop limit.",
+                    lines.append(tr("⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: o nó está na periferia da rede para muitos emissores. Melhorar a posição da antena ajuda mais do que aumentar o hop limit.",
                                     pct=f"{exh:.0f}"))
             if max_hops >= 6:  lines.append(tr("⚠️ Máximo de hops", max_hops=max_hops))
         if pct_ok >= 70 and (not hops_values or sum(hops_values)/len(hops_values) < 2):
@@ -857,21 +936,22 @@ class MetricsDataMixin:
     # (sinal + ruído) e o SNR quanto o sinal sobressai do ruído: SNR baixo
     # com RSSI forte aponta para ruído/interferência; com RSSI fraco, para
     # distância ou obstáculos. São indicativos, não um diagnóstico certo.
+    # O SNR só merece diagnóstico abaixo do patamar "laranja" da escala do
+    # preset (snr_levels["fair"], a 5 dB do limite de descodificação).
     RSSI_STRONG_DBM = -100
-    # LoRa descodifica abaixo de 0 dB (LongFast até ≈ −17 dB): só abaixo
-    # disto o SNR é baixo o bastante para merecer diagnóstico.
-    SNR_LOW_DB = -5.0
-    HOP_EXHAUSTED_WARN = 5.0    # % de pacotes sem hops restantes
-    HOP_EXHAUSTED_CRIT = 15.0
+    # % de pacotes sem hops restantes. Mede sobretudo a posição do nó na rede
+    # (na periferia, muitos pacotes chegam no fim do percurso): ficam abaixo
+    # dos 43 % medidos com a antena mal posicionada, para os continuar a mostrar.
+    HOP_EXHAUSTED_WARN = 20.0
+    HOP_EXHAUSTED_CRIT = 40.0
 
-    @classmethod
-    def radio_diagnosis(cls, snr, rssi) -> str:
+    def radio_diagnosis(self, snr, rssi) -> str:
         """'ok', 'noise', 'weak' ou '' (sem dados)."""
         if snr is None:
             return ''
-        if snr >= cls.SNR_LOW_DB:
+        if snr >= self.snr_levels["fair"]:
             return 'ok'
-        if rssi is not None and rssi > cls.RSSI_STRONG_DBM:
+        if rssi is not None and rssi > self.RSSI_STRONG_DBM:
             return 'noise'
         return 'weak'
 
@@ -1161,6 +1241,20 @@ class MetricsDataMixin:
                 "lbl_no_gps": tr("sem GPS"),
                 "lbl_ambiguous": tr("ambíguo")}
 
+    # Intervalo médio entre pacotes de um nó. Os firmwares de fábrica enviam
+    # telemetria e posição de 15 em 15 ou de 30 em 30 min (mediana real:
+    # 24 min); só intervalos curtos pesam no canal e merecem cor de aviso.
+    INTERVAL_HIGH_S = 60          # abaixo: vermelho (congestiona o canal)
+    INTERVAL_FREQUENT_S = 300     # abaixo: laranja
+
+    def interval_band(self, avg: float) -> tuple:
+        """(cor, chave da etiqueta) para um intervalo médio em segundos."""
+        if avg < self.INTERVAL_HIGH_S:
+            return "red", "high"
+        if avg < self.INTERVAL_FREQUENT_S:
+            return "orange", "frequent"
+        return "green", "normal"
+
     def _data_intervals(self) -> dict:
         rows = []
         for nid, entry in self._pkt_intervals.items():
@@ -1173,8 +1267,8 @@ class MetricsDataMixin:
             rows.append([nid, self._name(nid), avg, mn, mx, len(vals)])
         rows.sort(key=lambda r: r[1])
         return {"rows": rows, "now": self._now_str(),
-                "lbl_freq": {"high": tr("Alta frequência"), "normal": "Normal",
-                             "low": tr("Baixa frequência")}}
+                "lbl_freq": {"high": tr("Alta frequência"), "frequent": tr("Frequente"),
+                             "normal": "Normal"}}
 
     def _data_local_node(self) -> dict:
         """Dados da secção dedicada ao nó local."""

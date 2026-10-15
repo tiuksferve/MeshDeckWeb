@@ -31,6 +31,7 @@ export function connectSocket(onToast) {
   socket.on('local_position', (payload) => store.applyLocalPosition(payload));
   socket.on('my_node_id', () => {});   // já reflectido em local_node_ready
   socket.on('channels', (payload) => store.applyChannels(payload));
+  socket.on('snr_levels', (payload) => store.applySnrLevels(payload));
   socket.on('message', (payload) => {
     store.applyMessage(payload);
     // 'message' só traz recebidas (as nossas chegam por 'message_sent').

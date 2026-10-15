@@ -329,8 +329,16 @@ Run the tests with:
 
 ```bash
 pip install pytest
-python3 -m pytest
+python3 -m pytest                 # everything (about 1 min on a uConsole CM4)
+python3 -m pytest -m "not ui"     # without the browser tests
 ```
+
+The tests in `tests/ui/` open the real interface in a headless Chromium or
+Chrome, with simulated nodes, messages and metrics and no internet: login,
+every tab on desktop and phone sizes, map, compass, messages, the 12 metric
+sections, node configuration and the language switch. They are skipped when
+no Chromium/Chrome is installed (`MESHDECK_BROWSER=/path/to/browser` picks
+one). A failing test leaves a screenshot in `.pytest_cache/ui-failures/`.
 
 ---
 

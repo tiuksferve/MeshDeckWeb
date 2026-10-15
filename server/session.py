@@ -23,6 +23,7 @@ from core.loop import CoreLoop
 from core.mesh_worker import MeshtasticWorker
 from core.messages import MessageStore, channel_key, dm_key
 from core.metrics import SECTIONS, MeshMetrics
+from core.metrics_data import spreading_factor_of
 from core.node_store import NodeStore, node_record_from_nodedb
 from core import config_writer
 from core.serialize import to_jsonable
@@ -268,6 +269,17 @@ class MeshSession:
         self.node_ready = True
         self._broadcast(ev.NODE_READY, {"ready": True,
                                         "favorites": sorted(self.favorites.get_all())})
+        self._update_snr_levels()
+
+    def _update_snr_levels(self):
+        """As cores do SNR dependem do spreading factor do preset do nó."""
+        try:
+            lora = self._iface.localNode.localConfig.lora
+        except AttributeError:
+            lora = None
+        if self.metrics.set_spreading_factor(spreading_factor_of(lora)):
+            logger.debug("escala de SNR para SF%d", self.metrics.spreading_factor)
+            self._broadcast(ev.SNR_LEVELS, self.metrics.snr_levels)
 
     # -- nó local ---------------------------------------------------------
     def _on_my_node_id(self, node_id: str):
@@ -446,6 +458,7 @@ class MeshSession:
             "packet_stats":   self.packet_stats(),
             "metric_sections": [{"key": key, "label": tr(label)}
                                 for key, label in SECTIONS],
+            "snr_levels":     self.metrics.snr_levels,
             "config_lock":    self.config_lock.state(),
             "serial_ports":   list_serial_ports(),
             "log":            self.log.backlog(),
@@ -556,6 +569,7 @@ class MeshSession:
         result = self._with_config_lock(
             client_id, lambda: config_writer.save_config(iface, sections, owner))
         logger.info("configuração gravada: %s", result)
+        self._update_snr_levels()        # o preset pode ter mudado
         return result
 
     def save_channels(self, client_id: str, channels: list) -> dict:

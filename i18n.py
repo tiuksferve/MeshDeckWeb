@@ -615,7 +615,8 @@ _STRINGS: dict = {
     "Amostras":                     {"pt": "Amostras",                         "en": "Samples"},
     "Frequência":                   {"pt": "Frequência",                       "en": "Frequency"},
     "Alta frequência":              {"pt": "Alta frequência",                  "en": "High frequency"},
-    "Baixa frequência":             {"pt": "Baixa frequência",                 "en": "Low frequency"},
+    "Frequente": {"pt": "Frequente", "en": "Frequent"},
+    "Escala para SF{sf}: o rádio ainda descodifica até {floor} dB de SNR.": {"pt": "Escala para SF{sf}: o rádio ainda descodifica até {floor} dB de SNR.", "en": "Scale for SF{sf}: the radio still decodes down to {floor} dB SNR."},
     "⏳ Sem dados de intervalos ainda.":
                                     {"pt": "⏳ Sem dados de intervalos ainda.", "en": "⏳ No interval data yet."},
     "Requer pelo menos 2 pacotes por nó para calcular o intervalo médio.":
@@ -623,9 +624,7 @@ _STRINGS: dict = {
                                      "en": "Requires at least 2 packets per node to calculate the average interval."},
     "intervals_metric_info":        {"pt": "ℹ️ Métrica da rede — mede o tempo real entre pacotes consecutivos de cada nó observado.\n    Um intervalo muito baixo pode indicar um nó mal configurado a congestionar o canal.\n    Um intervalo muito alto pode indicar um nó com problemas de cobertura ou bateria fraca.\n    Não envolve o nó local a não ser que ele também envie pacotes observáveis.",
                                      "en": "ℹ️ Network metric — measures the actual time between consecutive packets from each observed node.\n    A very low interval may indicate a misconfigured node congesting the channel.\n    A very high interval may indicate a node with coverage problems or weak battery.\n    Does not involve the local node unless it also sends observable packets."},
-    "ℹ️ Intervalos <30s = alta frequência · 30–180s = normal · >180s = baixa frequência":
-                                    {"pt": "ℹ️ Intervalos &lt;30s = alta frequência · 30–180s = normal · &gt;180s = baixa frequência",
-                                     "en": "ℹ️ Intervals &lt;30s = high frequency · 30–180s = normal · &gt;180s = low frequency"},
+    "ℹ️ Intervalos <60s = alta frequência · 60–300s = frequente · ≥300s = normal": {"pt": "ℹ️ Intervalos &lt;60s = alta frequência · 60–300s = frequente · ≥300s = normal", "en": "ℹ️ Intervals &lt;60s = high frequency · 60–300s = frequent · ≥300s = normal"},
     "duty_cycle_note":              {"pt": "ℹ️ Duty cycle horário = airUtilTx, que o firmware já calcula sobre a última hora. Limite EU_433/EU_868: 10%/hora (ETSI EN300.220).",
                                      "en": "ℹ️ Hourly duty cycle = airUtilTx, which the firmware already computes over the last hour. EU_433/EU_868 limit: 10%/hour (ETSI EN300.220)."},
     # ── Configurações — secções ──────────────────────────────────────────────
@@ -810,13 +809,13 @@ _STRINGS: dict = {
     "{n} pacotes MQTT excluídos": {"pt": "{n} pacotes MQTT excluídos", "en": "{n} MQTT packets excluded"},
     "RSSI Médio": {"pt": "RSSI Médio", "en": "Average RSSI"},
     "Hop limit esgotado": {"pt": "Hop limit esgotado", "en": "Hop limit exhausted"},
-    "Acima de 5%: o hop limit pode ser curto para a rede": {"pt": "Acima de 5%: o hop limit pode ser curto para a rede", "en": "Above 5%: the hop limit may be too short for the mesh"},
+    "Acima de {pct}%: o nó está na periferia da rede para muitos emissores": {"pt": "Acima de {pct}%: o nó está na periferia da rede para muitos emissores", "en": "Above {pct}%: the node is at the edge of the mesh for many senders"},
     "Amostras de rádio": {"pt": "Amostras de rádio", "en": "Radio samples"},
     "Só pacotes ouvidos pela rádio do nó local": {"pt": "Só pacotes ouvidos pela rádio do nó local", "en": "Only packets heard by the local node's radio"},
     "Por Nó — SNR × RSSI": {"pt": "Por Nó — SNR × RSSI", "en": "Per Node — SNR × RSSI"},
-    "rf_diag_hint": {"pt": "SNR abaixo de −5 dB com RSSI forte (> −100 dBm) aponta para ruído ou interferência; com RSSI fraco, para distância ou obstáculos. Indicativo.", "en": "SNR below −5 dB with strong RSSI (> −100 dBm) points to noise or interference; with weak RSSI, to distance or obstacles. Indicative only."},
+    "rf_diag_hint": {"pt": "SNR abaixo de {snr} dB (a menos de 5 dB do limite do preset) com RSSI forte (> −100 dBm) aponta para ruído ou interferência; com RSSI fraco, para distância ou obstáculos. Indicativo.", "en": "SNR below {snr} dB (within 5 dB of the preset's limit) with strong RSSI (> −100 dBm) points to noise or interference; with weak RSSI, to distance or obstacles. Indicative only."},
     "Diagnóstico": {"pt": "Diagnóstico", "en": "Diagnosis"},
-    "⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: nós mais longe podem não estar a ser ouvidos. Considere aumentar o hop limit.": {"pt": "⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: nós mais longe podem não estar a ser ouvidos. Considere aumentar o hop limit.", "en": "⚠️ {pct}% of packets arrived with the hop limit exhausted: farther nodes may not be heard. Consider raising the hop limit."},
+    "⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: o nó está na periferia da rede para muitos emissores. Melhorar a posição da antena ajuda mais do que aumentar o hop limit.": {"pt": "⚠️ {pct}% dos pacotes chegaram com o hop limit esgotado: o nó está na periferia da rede para muitos emissores. Melhorar a posição da antena ajuda mais do que aumentar o hop limit.", "en": "⚠️ {pct}% of packets arrived with the hop limit exhausted: the node is at the edge of the mesh for many senders. A better antenna position helps more than a higher hop limit."},
     "DMs enviadas pelo nó local": {"pt": "DMs enviadas pelo nó local", "en": "DMs sent by the local node"},
     "Airtime TX/h (média)": {"pt": "Airtime TX/h (média)", "en": "TX airtime/h (avg)"},
     "Média do TX de todos os nós na última hora": {"pt": "Média do TX de todos os nós na última hora", "en": "Average TX of all nodes over the last hour"},

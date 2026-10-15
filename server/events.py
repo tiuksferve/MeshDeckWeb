@@ -42,6 +42,7 @@ PACKET          = "packet"            # projecção compacta de um pacote
 PACKET_STATS    = "packet_stats"      # SNR médio e pacotes/min da barra de estado
 NODEDB_RESET    = "nodedb_reset"      # a NodeDB do nó foi limpa
 NODE_READY      = "node_ready"        # a configuração do nó já pode ser lida
+SNR_LEVELS      = "snr_levels"        # limiares de cor do SNR para o preset do nó
 CONFIG_LOCK     = "config_lock"       # quem está a gravar configuração
 METRICS         = "metrics"           # HTML de uma secção de métricas
 UNREAD          = "unread"            # contadores de não-lidas, após marcar como lida

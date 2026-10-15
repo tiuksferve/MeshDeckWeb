@@ -8,6 +8,8 @@
  */
 'use strict';
 
+import { setSnrLevels } from './utils.js';
+
 class Store extends EventTarget {
   constructor() {
     super();
@@ -54,6 +56,7 @@ class Store extends EventTarget {
     this.metricSections = snapshot.metric_sections || [];
     this.favorites = new Set(snapshot.favorites || []);
     this.configLock = snapshot.config_lock || this.configLock;
+    setSnrLevels(snapshot.snr_levels);
 
     this.conversations.clear();
     const conv = (snapshot.messages && snapshot.messages.conversations) || {};
@@ -69,6 +72,11 @@ class Store extends EventTarget {
   }
 
   /* ── eventos incrementais do socket ──────────────────────────────────── */
+  applySnrLevels(levels) {
+    setSnrLevels(levels);
+    this.emit('nodes-changed');          // redesenha as cores do SNR
+  }
+
   applyNodes(payload) {
     (payload.nodes || []).forEach((node) => this.nodes.set(node.id_string, node));
     if (payload.counts) this.counts = payload.counts;

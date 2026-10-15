@@ -101,6 +101,7 @@ class MetricsRenderMixin:
 </body></html>"""
 
     def _html_overview(self) -> str:
+        snr_good, snr_fair = self.snr_levels["good"], self.snr_levels["fair"]
         now = time.time()
         total_pkts = len(self._packets)
         cutoff2h   = now - 7200
@@ -160,7 +161,7 @@ class MetricsRenderMixin:
   {kpi(ppm, "/min", tr("Pacotes/min"), "", "ov-ppm")}
 </div>
 <div class="grid-3">
-  {kpi(snr_avg, " dB", tr("SNR Médio"), "green" if snr_avg and snr_avg >= 0 else "orange", "ov-snr")}
+  {kpi(snr_avg, " dB", tr("SNR Médio"), self.snr_color(snr_avg), "ov-snr")}
   {kpi(hops_avg, " hops", tr("Hops Médio"), "", "ov-hops")}
   {kpi(delivery, "%", tr("Taxa Entrega"), "green" if delivery and delivery >= 80 else "orange", "ov-delivery", tr("DMs enviadas pelo nó local"))}
 </div>
@@ -192,7 +193,7 @@ window._metricsUpdateData = function(d) {{
   setKpi('ov-active', d.n_active, d.unit_nos||' nodes');
   setKpi('ov-ppm', d.ppm, '/min');
   setKpi('ov-snr', d.snr_avg, ' dB');
-  setKpiClass('ov-snr', d.snr_avg!==null&&d.snr_avg>=0?'green':'orange');
+  setKpiClass('ov-snr', d.snr_avg===null?'':d.snr_avg>={snr_good}?'green':d.snr_avg>={snr_fair}?'orange':'red');
   setKpi('ov-hops', d.hops_avg, ' hops');
   setKpi('ov-delivery', d.delivery, '%');
   setKpiClass('ov-delivery', d.delivery!==null&&d.delivery>=80?'green':'orange');
@@ -504,7 +505,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
 </div>
 <div class="grid-3">
   <div class="card"><h3>{tr("SNR Médio")}</h3>
-    <div id="snr-avg" class="kpi {'green' if snr_avg and snr_avg>=5 else 'orange' if snr_avg and snr_avg>=0 else 'red'}">{snr_avg if snr_avg is not None else '—'} dB</div></div>
+    <div id="snr-avg" class="kpi {self.snr_color(snr_avg)}">{snr_avg if snr_avg is not None else '—'} dB</div></div>
   <div class="card"><h3>{tr("SNR Mediano")}</h3>
     <div id="snr-med" class="kpi">{snr_med if snr_med is not None else '—'} dB</div></div>
   <div class="card"><h3>{tr("SNR P10 (pior 10%)")}</h3>
@@ -516,7 +517,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
     <div id="rssi-sub" class="kpi-sub">{tr("mediana")} {rd["rssi_med"] if rd["rssi_med"] is not None else '—'} dBm · {rd["n_rssi"]} {tr("amostras")}</div></div>
   <div class="card"><h3>{tr("Hop limit esgotado")}</h3>
     <div id="hop-exh" class="kpi {exh_color}">{exh if exh is not None else '—'}{'%' if exh is not None else ''}</div>
-    <div id="hop-exh-sub" class="kpi-sub">{rd["lbl_exhausted_sub"]}<br>{tr("Acima de 5%: o hop limit pode ser curto para a rede")}</div></div>
+    <div id="hop-exh-sub" class="kpi-sub">{rd["lbl_exhausted_sub"]}<br>{tr("Acima de {pct}%: o nó está na periferia da rede para muitos emissores", pct=f"{self.HOP_EXHAUSTED_WARN:g}")}</div></div>
   <div class="card"><h3>{tr("Amostras de rádio")}</h3>
     <div id="rf-n" class="kpi blue">{len(self._snr_values)}</div>
     <div id="rf-mqtt" class="kpi-sub">{rd["lbl_mqtt_excluded"]}<br>{tr("Só pacotes ouvidos pela rádio do nó local")}</div></div>
@@ -533,11 +534,11 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
 </div>
 <div class="card" style="margin-top:16px">
   <h3>{tr("Por Nó — SNR × RSSI")}</h3>
-  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("rf_diag_hint")}</div>
+  <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("rf_diag_hint", snr=f"{self.snr_levels['fair']:g}")}</div>
   <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Pacotes")}</th><th>SNR</th><th>RSSI</th><th>Hops</th><th>{tr("Diagnóstico")}</th></tr><tbody id="rf-node-tbody" data-filterable="1">{rf_rows}</tbody></table>
 </div>
 <div class="card" id="assessment-card" style="margin-top:16px;border-left:4px solid {
-'#39d353' if snr_avg and snr_avg >= 5 else '#f0883e' if snr_avg and snr_avg >= 0 else '#f85149'
+{'green': '#39d353', 'orange': '#f0883e', 'red': '#f85149'}.get(self.snr_color(snr_avg), '#8b949e')
 }">
   <h3>{tr("Avaliação da Qualidade RF")}</h3>
   <div id="rf-assessment" style="font-size:13px;line-height:1.7;color:#e6edf3">{self._rf_assessment(snr_avg, snr_med, snr_p10, self._hops_values)}</div>
@@ -549,8 +550,9 @@ window._snrChart = new Chart(document.getElementById('snrChart'), {{
     labels: {json.dumps(snr_labels)},
     datasets: [{{ label: '{tr("Pacotes")}', data: {json.dumps(snr_counts)},
       backgroundColor: {json.dumps(
-          ['rgba(248,81,73,0.7)' if i < 5 else 'rgba(240,136,62,0.7)' if i < 10 else 'rgba(57,211,83,0.7)'
-           for i in range(len(snr_counts))])},
+          [{'green': 'rgba(57,211,83,0.7)', 'orange': 'rgba(240,136,62,0.7)'}.get(
+               self.snr_color(float(label) + 1), 'rgba(248,81,73,0.7)')
+           for label in snr_labels])},
       borderRadius: 3 }}]
   }},
   options: {{
@@ -1513,6 +1515,7 @@ window._metricsFilterTable = function(text) {{
         )
 
     def _html_range_links(self) -> str:
+        snr_good, snr_fair = self.snr_levels["good"], self.snr_levels["fair"]
         d = self._data_range_links()
         if not (d["rows"] or d["direct_rows"] or d["relay_rows"]):
             body = (
@@ -1616,7 +1619,7 @@ function _applyFilter(){{
 window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase().trim();_applyFilter();}};
 function _esc(v){{ return String(v===null||v===undefined?'':v).replace(/[&<>"]/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c];}}); }}
 function _snrTag(v){{ if(v===null||v===undefined) return "<span class='tag tag-gray'>—</span>";
-  var c=v>=5?'green':v>=-5?'orange':'red'; return "<span class='tag tag-"+c+"'>"+(v>0?'+':'')+v.toFixed(1)+" dB</span>"; }}
+  var c=v>={snr_good}?'green':v>={snr_fair}?'orange':'red'; return "<span class='tag tag-"+c+"'>"+(v>0?'+':'')+v.toFixed(1)+" dB</span>"; }}
 function _distTag(v, noGps){{ if(v===null||v===undefined) return "<span class='tag tag-gray'>"+noGps+"</span>";
   var c=v<2?'green':v<10?'orange':'blue'; return "<span class='tag tag-"+c+"'>"+v+" km</span>"; }}
 window._metricsUpdateData=function(d){{
@@ -1653,9 +1656,8 @@ window._metricsUpdateData=function(d){{
 
         rows_html = ""
         for nid, nid_n, avg, mn, mx, count in d["rows"]:
-            # Cores: verde <60s (activo), laranja 60-300s, vermelho >300s
-            color = "green" if avg < 60 else ("orange" if avg < 300 else "red")
-            freq_label = tr("Alta frequência") if avg < 30 else ("Normal" if avg < 180 else tr("Baixa frequência"))
+            color, band = self.interval_band(avg)
+            freq_label = d["lbl_freq"][band]
             rows_html += (
                 f"<tr><td>{nid}</td><td>{nid_n}</td>"
                 f"<td><span class='tag tag-{color}'>{avg}s</span></td>"
@@ -1678,7 +1680,7 @@ window._metricsUpdateData=function(d){{
     <tbody id="intervals-tbody" data-filterable="1">{rows_html}</tbody>
   </table>
   <div style="color:#8b949e;font-size:10px;margin-top:8px;padding-top:8px;border-top:1px solid #21262d">
-    {tr('ℹ️ Intervalos <30s = alta frequência · 30–180s = normal · >180s = baixa frequência')}
+    {tr('ℹ️ Intervalos <60s = alta frequência · 60–300s = frequente · ≥300s = normal')}
   </div>
 </div>
 <script>
@@ -1711,12 +1713,12 @@ window._metricsUpdateData = function(d) {{
   if (!d || !d.rows) return;
   var tbody = document.getElementById('intervals-tbody');
   if (!tbody) return;
-  var LABELS = d.lbl_freq || {{'high':'High frequency','normal':'Normal','low':'Low frequency'}};
+  var LABELS = d.lbl_freq || {{'high':'High frequency','frequent':'Frequent','normal':'Normal'}};
   var html = '';
   d.rows.forEach(function(r) {{
     var nid=r[0], nm=r[1], avg=r[2], mn=r[3], mx=r[4], cnt=r[5];
-    var color = avg < 60 ? 'green' : avg < 300 ? 'orange' : 'red';
-    var freq  = avg < 30 ? LABELS.high : avg < 180 ? LABELS.normal : LABELS.low;
+    var color = avg < {self.INTERVAL_HIGH_S} ? 'red' : avg < {self.INTERVAL_FREQUENT_S} ? 'orange' : 'green';
+    var freq  = avg < {self.INTERVAL_HIGH_S} ? LABELS.high : avg < {self.INTERVAL_FREQUENT_S} ? LABELS.frequent : LABELS.normal;
     html += '<tr><td>'+nid+'</td><td>'+nm+'</td>'
           + '<td><span class="tag tag-'+color+'">'+avg+'s</span></td>'
           + '<td style="color:#8b949e">'+mn+'s</td>'
@@ -1819,6 +1821,7 @@ window._noiseChart = new Chart(document.getElementById('noiseChart'), {{
         return radio + host, js
 
     def _html_local_node(self) -> str:
+        snr_good, snr_fair = self.snr_levels["good"], self.snr_levels["fair"]
         # Ecrã de espera — _WAITING_SECTIONS + _refresh_current fazem a transição
         # automaticamente quando set_local_node_id é chamado.
         if not self._local_nid:
@@ -1865,9 +1868,7 @@ window._noiseChart = new Chart(document.getElementById('noiseChart'), {{
 
         # SNR recebido
         snr_avg   = d['snr_rx_avg']
-        snr_color = ("green"  if snr_avg and snr_avg >= 5 else
-                     "orange" if snr_avg and snr_avg >= 0 else
-                     "red"    if snr_avg else "")
+        snr_color = self.snr_color(snr_avg)
 
         # Delivery
         delivery = d['delivery']
@@ -2081,7 +2082,7 @@ window._metricsUpdateData = function(d) {{
   // SNR
   var snr = d.snr_rx_avg;
   set('ln-snr', snr !== null && snr !== undefined ? snr + ' dB' : '\u2014');
-  setClass('ln-snr', snr===null?'':snr>=5?'green':snr>=0?'orange':'red');
+  setClass('ln-snr', snr===null||snr===undefined?'':snr>={snr_good}?'green':snr>={snr_fair}?'orange':'red');
   var pkt = d.lbl_packets || 'packets';
   set('ln-snr-sub', 'min '+(d.snr_rx_min!==null?d.snr_rx_min:'\u2014')+' \u00b7 max '+(d.snr_rx_max!==null?d.snr_rx_max:'\u2014')+' \u00b7 '+d.n_snr_rx+' '+pkt);
 

@@ -70,11 +70,19 @@ export function escapeHtml(text) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/* Cor por SNR, coerente com constants.py: >=5 verde, >=0 laranja, abaixo vermelho. */
+/* Cor por SNR. Os limiares vêm do servidor (snr_levels) e dependem do
+   preset do nó: medem a margem até ao SNR mínimo que o rádio descodifica.
+   Por omissão, os de LongFast (SF11, limite −17,5 dB). */
+let snrLevels = { good: -7.5, fair: -12.5 };
+
+export function setSnrLevels(levels) {
+  if (levels && typeof levels.good === 'number' && typeof levels.fair === 'number') snrLevels = levels;
+}
+
 export function snrClass(snr) {
   if (snr == null) return '';
-  if (snr >= 5) return 'ok';
-  if (snr >= 0) return 'warn';
+  if (snr >= snrLevels.good) return 'ok';
+  if (snr >= snrLevels.fair) return 'warn';
   return 'bad';
 }
 

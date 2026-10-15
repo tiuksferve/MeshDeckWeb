@@ -248,13 +248,14 @@ def test_hops_come_from_each_packet_and_missing_hop_limit_means_zero(metrics):
 
 
 def test_radio_diagnosis_separates_noise_from_weak_signal(metrics):
-    assert MeshMetrics.radio_diagnosis(5.0, -110) == "ok"
-    assert MeshMetrics.radio_diagnosis(-2.0, -85) == "ok"       # normal em LoRa
-    assert MeshMetrics.radio_diagnosis(-8.0, -85) == "noise"     # forte mas sujo
-    assert MeshMetrics.radio_diagnosis(-8.0, -120) == "weak"     # longe
-    assert MeshMetrics.radio_diagnosis(None, -90) == ""
+    # Escala de LongFast (SF11): só abaixo de −12,5 dB há diagnóstico.
+    assert metrics.radio_diagnosis(5.0, -110) == "ok"
+    assert metrics.radio_diagnosis(-8.0, -85) == "ok"        # normal em LongFast
+    assert metrics.radio_diagnosis(-14.0, -85) == "noise"    # forte mas sujo
+    assert metrics.radio_diagnosis(-14.0, -120) == "weak"    # longe
+    assert metrics.radio_diagnosis(None, -90) == ""
 
-    metrics.ingest_raw_packet(radio(snr=-8.0, rssi=-85))
+    metrics.ingest_raw_packet(radio(snr=-14.0, rssi=-85))
     metrics.ingest_raw_packet(radio(from_num=0x11110002, snr=7.0, rssi=-95))
     rows = metrics.data_for("rf")["node_rows"]
     assert [r[6] for r in rows] == ["noise", "ok"]              # piores primeiro
@@ -428,3 +429,42 @@ def test_chart_legends_follow_the_language(metrics, lang, expected, absent):
         assert text in pages, text
     for text in absent:
         assert text not in pages, text
+
+
+# ---------------------------------------------------------------------------
+# Limiares de cor
+# ---------------------------------------------------------------------------
+def test_snr_scale_follows_the_spreading_factor(metrics):
+    from core.metrics_data import spreading_factor_of
+    assert spreading_factor_of(None) == 11                          # LongFast por omissão
+    assert spreading_factor_of({"use_preset": True, "modem_preset": "MEDIUM_FAST"}) == 9
+    assert spreading_factor_of({"use_preset": True, "modem_preset": 6}) == 7   # SHORT_FAST (enum)
+    assert spreading_factor_of({"use_preset": False, "modem_preset": "LONG_FAST",
+                                "spread_factor": 12}) == 12           # configuração manual
+    assert spreading_factor_of({"use_preset": True, "modem_preset": "PRESET_NOVO",
+                                "spread_factor": 10}) == 10
+
+    levels = metrics.snr_levels
+    assert (levels["floor"], levels["fair"], levels["good"]) == (-17.5, -12.5, -7.5)
+    assert [metrics.snr_color(v) for v in (-7.5, -8.0, -12.5, -13.0, None)] == \
+        ["green", "orange", "orange", "red", ""]
+    assert metrics.snr_color(0.0) == "green"                        # 0 dB não é "sem valor"
+
+    assert metrics.set_spreading_factor(7) is True
+    assert metrics.set_spreading_factor(7) is False
+    assert (metrics.snr_levels["fair"], metrics.snr_levels["good"]) == (-2.5, 2.5)
+    assert metrics.radio_diagnosis(-8.0, -120) == "weak"            # em SF7, −8 dB é fraco
+
+
+def test_rf_assessment_uses_the_preset_scale(metrics):
+    for i, snr in enumerate((-5.0, -9.0, -10.0, -14.0)):
+        metrics.ingest_raw_packet(radio(from_num=0x11110002 + i, snr=snr))
+    text = metrics.data_for("rf")["assessment"]
+    assert "SF11" in text and "-17.5" in text
+    assert "25%" in text                                            # 1 de 4 em cada faixa
+
+
+def test_interval_bands_flag_chatty_nodes_not_quiet_ones(metrics):
+    assert metrics.interval_band(30) == ("red", "high")
+    assert metrics.interval_band(120) == ("orange", "frequent")
+    assert metrics.interval_band(1800) == ("green", "normal")       # telemetria de fábrica

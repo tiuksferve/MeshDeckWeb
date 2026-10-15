@@ -747,3 +747,21 @@ def test_login_route_blocks_guessing_even_with_the_right_password(server):
     now[0] += 61
     assert login(server).status_code == 200
     assert client.get("/api/state").status_code == 200
+
+
+def test_snr_levels_follow_the_node_preset(server):
+    """O preset do nó chega ao browser no snapshot e, se mudar, por evento."""
+    from types import SimpleNamespace
+    mesh, broadcasts = server["mesh"], server["broadcasts"]
+    assert mesh.snapshot()["snr_levels"]["good"] == -7.5            # LongFast por omissão
+
+    lora = SimpleNamespace(use_preset=True, modem_preset="MEDIUM_FAST", spread_factor=0)
+    iface = SimpleNamespace(localNode=SimpleNamespace(localConfig=SimpleNamespace(lora=lora)))
+    mesh._on_interface_ready(iface)
+    events = [p for e, p in broadcasts if e == "snr_levels"]
+    assert events and events[-1]["spreading_factor"] == 9 and events[-1]["good"] == -2.5
+    assert mesh.snapshot()["snr_levels"]["fair"] == -7.5
+
+    broadcasts.clear()
+    mesh._on_interface_ready(iface)                                  # sem mudança, sem evento
+    assert not [e for e, _p in broadcasts if e == "snr_levels"]
