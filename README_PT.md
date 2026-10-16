@@ -153,6 +153,13 @@ que já está instalado é reaproveitado.
 > não conseguir criar o ambiente, instale primeiro o `python3-venv`:
 > `sudo apt install python3-venv`.
 
+> **macOS:** com a firewall ligada, o instalador oferece-se para autorizar o
+> Python — sem isso o telemóvel não chega ao servidor, embora `localhost` no
+> Mac funcione. Ponha o **Endereço Wi-Fi privado** em *Fixo* (Definições →
+> Wi-Fi → Detalhes) ou reserve o IP no router: se o IP mudar, o servidor
+> mostra o endereço novo ao arrancar e avisa quando o certificado HTTPS
+> precisa de `run_server.py --make-cert`.
+
 ---
 
 ## ⚙️ Instalação Manual

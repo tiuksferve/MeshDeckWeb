@@ -273,36 +273,49 @@ def login_required(view):
 
 
 def announce_first_run(config: ServerConfig, bind_host: str, bind_port: int):
-    """Imprime a password gerada e o aviso de exposição de rede."""
+    """Imprime a password gerada, os endereços reais por onde entrar e o
+    aviso de exposição de rede. Com bind em 0.0.0.0 mostra os IPs da
+    máquina: se o IP mudar (DHCP, endereço Wi-Fi privado do macOS), vê-se
+    logo aqui, e também se o certificado HTTPS já não o cobre."""
+    from server import tls
+    local = bind_host in ("127.0.0.1", "localhost", "::1")
+    hosts = [bind_host]
+    if bind_host in ("0.0.0.0", "::", ""):
+        hosts = tls.local_addresses() or ["localhost"]
+
     lines = ["", "=" * 68]
     if config.generated_password:
         lines += [
-            "  MeshDeckWeb — primeira execução",
+            "  " + tr("MeshDeckWeb — primeira execução"),
             "",
-            f"  Password gerada:  {config.generated_password}",
+            "  " + tr("Password gerada:") + f"  {config.generated_password}",
             "",
-            "  Guarde-a agora: só o hash fica em disco e esta linha não",
-            f"  volta a aparecer. Pode trocá-la em {config.path}",
-            "  apagando a chave password_hash, ou pela interface.",
+            "  " + tr("Guarde-a agora: só o hash fica em disco e esta linha não volta a aparecer."),
+            "  " + tr("Pode trocá-la em {path} apagando a chave password_hash, ou pela interface.",
+                      path=config.path),
         ]
     else:
-        lines.append("  MeshDeckWeb — servidor web")
-    lines += ["", f"  Interface:  http://{bind_host}:{bind_port}/"]
+        lines.append("  " + tr("MeshDeckWeb — servidor web"))
+    lines += [""] + [f"  {tr('Interface:'):<11} http://{h}:{bind_port}/" for h in hosts]
     if config.tls_enabled:
-        https = f"https://{bind_host}:{config.https_port}"
-        lines += [
-            f"  HTTPS:      {https}/   (necessário para a bússola do telemóvel)",
-            f"  CA local para instalar nos dispositivos:  {https}/ca.crt",
-        ]
-    if bind_host not in ("127.0.0.1", "localhost", "::1"):
+        lines += [f"  {'HTTPS:':<11} https://{h}:{config.https_port}/" for h in hosts]
+        lines += ["  " + tr("(HTTPS é necessário para a bússola do telemóvel)"),
+                  "  " + tr("CA local para instalar nos dispositivos:")
+                  + f"  https://{hosts[0]}:{config.https_port}/ca.crt"]
+        covered = tls.certificate_names(config.tls_cert)
+        missing = [h for h in hosts if covered and h not in covered]
+        if missing:
+            lines += ["",
+                      "  " + tr("AVISO: o certificado HTTPS não inclui {ips} (o IP mudou?).",
+                                ips=", ".join(missing)),
+                      "  " + tr("Gere outro com:  run_server.py --make-cert  (a CA instalada continua válida).")]
+    if not local:
         lines += [
             "",
-            "  AVISO: ligado a " + bind_host + ", acessível a toda a rede local.",
-            "  Quem entrar pode reconfigurar o nó, incluindo canais e PSK.",
-        ]
-        lines += [
-            "  Em HTTP simples a sessão viaja em claro — use o endereço HTTPS",
-            "  (run_server.py --make-cert) ou uma rede de confiança.",
+            "  " + tr("AVISO: acessível a toda a rede local."),
+            "  " + tr("Quem entrar pode reconfigurar o nó, incluindo canais e PSK."),
+            "  " + tr("Em HTTP simples a sessão viaja em claro — use o endereço HTTPS"),
+            "  " + tr("(run_server.py --make-cert) ou uma rede de confiança."),
         ]
     lines += ["=" * 68, ""]
     print("\n".join(lines), flush=True)

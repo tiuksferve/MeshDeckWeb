@@ -72,6 +72,18 @@ def default_names(extra=()) -> list:
     return out
 
 
+def certificate_names(cert_path: str) -> set:
+    """IPs e nomes por onde o certificado é válido (vazio se não der para ler)."""
+    try:
+        with open(cert_path, "rb") as fh:
+            cert = x509.load_pem_x509_certificate(fh.read())
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    except (OSError, ValueError, x509.ExtensionNotFound):
+        return set()
+    return ({str(ip) for ip in san.get_values_for_type(x509.IPAddress)}
+            | set(san.get_values_for_type(x509.DNSName)))
+
+
 def _write_private(path: str, data: bytes):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "wb") as fh:

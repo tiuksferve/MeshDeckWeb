@@ -5,6 +5,7 @@ A rede e o relógio são simulados: nenhum teste vai à internet.
 """
 
 import os
+import ssl
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -157,3 +158,14 @@ def test_tile_route_offline_unknown_is_404_not_cached(app_client):
     response = client.get("/tiles/osm/3/1/2.png")
     assert response.status_code == 404
     assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_ssl_context_includes_certifi_roots():
+    """No macOS, o Python de python.org não traz certificados: sem os do
+    certifi, nenhum mosaico do OpenStreetMap passava a verificação."""
+    import certifi
+
+    context = tile_cache.ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    bundled = ssl.create_default_context(cafile=certifi.where()).cert_store_stats()["x509_ca"]
+    assert context.cert_store_stats()["x509_ca"] >= bundled > 0

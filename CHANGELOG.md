@@ -40,6 +40,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     relayers, and a better antenna hears even more copies.
   - Corrupted packets and noise floor keep their thresholds: they depend on
     where the antenna is and should keep pointing at a poor location.
+- **🖥 Start message** shows the machine's real addresses instead of
+  `0.0.0.0`, in the chosen language, and warns when the HTTPS certificate no
+  longer covers the current IP.
+- **🍎 Installer on macOS:** with the firewall on, offers to allow Python
+  through it (the rule must name the `Python.app` that actually listens);
+  explains how to keep the IP from changing.
+
+### Fixed
+
+- **🗺 Light and dark maps on macOS** stayed blank with "no internet": the
+  Python from python.org does not trust the system certificates, so every
+  tile download failed. The server now also uses the `certifi` bundle.
 
 ---
 

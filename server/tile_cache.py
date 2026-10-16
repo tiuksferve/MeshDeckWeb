@@ -18,6 +18,7 @@ uso offline, por isso continua a ir directamente à Esri.
 
 import logging
 import os
+import ssl
 import threading
 import time
 import urllib.error
@@ -43,10 +44,30 @@ def cache_dir() -> str:
     return os.path.join(base, "meshdeck", "tiles")
 
 
+def ssl_context() -> ssl.SSLContext:
+    """Certificados do sistema mais os do certifi. O Python de python.org no
+    macOS não usa os certificados do sistema (até correr "Install
+    Certificates.command"), e sem o certifi todos os pedidos ao OpenStreetMap
+    falhavam a verificar o certificado — o mapa ficava "sem internet"."""
+    context = ssl.create_default_context()
+    try:
+        import certifi                   # vem com o meshtastic (via requests)
+        context.load_verify_locations(cafile=certifi.where())
+    except (ImportError, OSError):
+        pass
+    return context
+
+
+_SSL_CONTEXT = None
+
+
 def fetch_upstream(z: int, x: int, y: int) -> bytes:
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        _SSL_CONTEXT = ssl_context()
     request = urllib.request.Request(UPSTREAM.format(z=z, x=x, y=y),
                                      headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as response:
+    with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S, context=_SSL_CONTEXT) as response:
         if response.status != 200:
             raise urllib.error.HTTPError(request.full_url, response.status, "", None, None)
         return response.read()

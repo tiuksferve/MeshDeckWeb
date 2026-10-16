@@ -5,3 +5,4 @@ Flask>=2.2
 Flask-SocketIO>=5.3
 simple-websocket>=1.0
 cryptography>=38.0
+certifi>=2022.12.7

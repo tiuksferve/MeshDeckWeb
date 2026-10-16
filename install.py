@@ -118,6 +118,23 @@ TEXTS = {
                 "(steps in the README, section \"HTTPS and the Device Compass\")."),
     "firewall": ("Se o telemóvel não abrir a página, confirme que a firewall deixa passar a porta {port}.",
                  "If the phone cannot open the page, check that the firewall allows port {port}."),
+    "ip_hint": ("O IP pode mudar. Para o fixar, reserve-o no router (DHCP estático).",
+                "The IP may change. To keep it fixed, reserve it in your router (static DHCP)."),
+    "mac_ip_hint": ("No macOS, ponha também \"Endereço Wi-Fi privado\" em Fixo (Definições → Wi-Fi → Detalhes).\n"
+                    "Se o IP mudar, o servidor mostra o novo ao arrancar; o HTTPS precisa de  run_server.py --make-cert.",
+                    "On macOS, also set \"Private Wi-Fi Address\" to Fixed (Settings → Wi-Fi → Details).\n"
+                    "If the IP changes, the server shows the new one at start; HTTPS then needs  run_server.py --make-cert."),
+    "mac_fw_on": ("A firewall do macOS está ligada e ainda não deixa o Python aceitar ligações:\n"
+                  "  {app}\nSem isto, o telemóvel não chega ao servidor (no próprio Mac, localhost funciona).",
+                  "The macOS firewall is on and does not yet let Python accept connections:\n"
+                  "  {app}\nWithout this, the phone cannot reach the server (localhost on the Mac still works)."),
+    "mac_fw_blockall": ("⚠ A firewall está a \"Bloquear todas as ligações de entrada\": desligue essa opção\n"
+                        "  em Definições → Rede → Firewall → Opções, senão nenhuma autorização tem efeito.",
+                        "⚠ The firewall is set to \"Block all incoming connections\": turn that option off\n"
+                        "  in Settings → Network → Firewall → Options, or no permission will take effect."),
+    "mac_fw_ask": ("Autorizar agora? (pede a password do Mac)", "Allow it now? (asks for your Mac password)"),
+    "mac_fw_ok": ("✅ Python autorizado na firewall.", "✅ Python allowed through the firewall."),
+    "mac_fw_manual": ("Para autorizar mais tarde, corra:", "To allow it later, run:"),
     "ask_start": ("Arrancar o servidor agora?", "Start the server now?"),
 }
 
@@ -316,6 +333,42 @@ def configure_https(config, network: bool):
     print(t("https_ok", names=", ".join(result["names"])))
 
 
+MAC_FIREWALL = "/usr/libexec/ApplicationFirewall/socketfilterfw"
+
+
+def macos_python_app():
+    """O que a firewall do macOS vê a escutar: num Python "framework"
+    (python.org, Homebrew) o processo corre dentro do Python.app, não no
+    python3 do .venv, e a regra só funciona se apontar para essa app."""
+    app = os.path.realpath(os.path.join(sys.base_prefix, "Resources", "Python.app"))
+    return app if os.path.isdir(app) else os.path.realpath(sys.executable)
+
+
+def macos_firewall(run=None):
+    """Com a firewall do macOS ligada, as ligações vindas da rede são
+    recusadas sem aviso até o Python ser autorizado. Oferece-se para o
+    autorizar (com sudo), ou mostra os comandos."""
+    if sys.platform != "darwin" or not os.path.exists(MAC_FIREWALL):
+        return
+    run = run or (lambda args: subprocess.run(args, capture_output=True, text=True).stdout)
+    if "is enabled" not in run([MAC_FIREWALL, "--getglobalstate"]):
+        return
+    app = macos_python_app()
+    if "permitted" in run([MAC_FIREWALL, "--getappblocked", app]):
+        return
+    print("\n" + t("mac_fw_on", app=app))
+    if "enabled" in run([MAC_FIREWALL, "--getblockall"]).lower():
+        print(t("mac_fw_blockall"))
+    commands = [["sudo", MAC_FIREWALL, "--add", app], ["sudo", MAC_FIREWALL, "--unblockapp", app]]
+    if ask_yes(t("mac_fw_ask"), default=True):
+        if all(subprocess.call(c) == 0 for c in commands):
+            print(t("mac_fw_ok"))
+            return
+    print(t("mac_fw_manual"))
+    for c in commands:
+        print("    " + " ".join(f'"{a}"' if " " in a else a for a in c))
+
+
 def write_launcher(flags):
     args = "".join(" " + (f'"{a}"' if " " in a else a) for a in flags)
     if WINDOWS:
@@ -370,8 +423,14 @@ def stage_configure(chosen_lang):
             print(f"    https://{h}:{config.https_port}/")
         print("\n" + t("ca_hint", url=f"https://{hosts[0]}:{config.https_port}/ca.crt"))
     if network:
-        print("\n" + t("firewall", port=port))
+        print("\n" + t("ip_hint"))
+        if sys.platform == "darwin":
+            print(t("mac_ip_hint"))
+        else:
+            print(t("firewall", port=port))
     print("=" * 64)
+    if network:
+        macos_firewall()
 
     if ask_yes(t("ask_start"), default=True):
         os.chdir(ROOT)

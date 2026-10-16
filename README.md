@@ -153,6 +153,13 @@ installed is reused.
 > installer cannot create the environment, install `python3-venv` first:
 > `sudo apt install python3-venv`.
 
+> **macOS:** if the firewall is on, the installer offers to allow Python
+> through it — otherwise the phone cannot reach the server, while `localhost`
+> on the Mac still works. Set **Private Wi-Fi Address** to *Fixed*
+> (Settings → Wi-Fi → Details) or reserve the IP in your router: when the IP
+> changes, the server shows the new address at start and warns if the HTTPS
+> certificate needs `run_server.py --make-cert`.
+
 ---
 
 ## ⚙️ Manual Installation
