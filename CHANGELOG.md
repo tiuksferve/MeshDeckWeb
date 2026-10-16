@@ -46,12 +46,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **🍎 Installer on macOS:** with the firewall on, offers to allow Python
   through it (the rule must name the `Python.app` that actually listens);
   explains how to keep the IP from changing.
+- **🏠 Local node in the header, not in the node list.** On phones, its short
+  name sits next to the connection button, shown like on the node cards; the
+  button shortens the connection (`/dev/cu.usbmodem1101` → `usb1101`, port
+  4403 hidden) so everything stays on one line. Desktop keeps the full name
+  and address.
 
 ### Fixed
 
 - **🗺 Light and dark maps on macOS** stayed blank with "no internet": the
   Python from python.org does not trust the system certificates, so every
   tile download failed. The server now also uses the `certifi` bundle.
+- The local node's name in the header only appeared after a language change
+  or a reconnection; it now shows as soon as the page opens.
 
 ---
 

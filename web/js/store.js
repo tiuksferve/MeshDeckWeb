@@ -69,6 +69,8 @@ class Store extends EventTarget {
     this.emit('channels-changed');
     this.emit('connection-changed');
     this.emit('messages-changed');
+    this.emit('local-node-changed');
+    this.emit('local-position-changed');
   }
 
   /* ── eventos incrementais do socket ──────────────────────────────────── */
@@ -213,9 +215,10 @@ class Store extends EventTarget {
       || (node.short_name || '').toLowerCase().includes(q);
   }
 
+  /* O nó local não entra: já está no cabeçalho, ao lado da ligação. */
   visibleNodes() {
     return this.nodeList().filter((n) => {
-      if (n.is_local) return true;
+      if (n.is_local) return false;
       if (n.last_heard == null) return false;
       return this.matchesSearch(n);
     });

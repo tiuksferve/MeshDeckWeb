@@ -12,7 +12,7 @@ Exemplos:
     python3 run_server.py --host 0.0.0.0 --port 8080
     python3 run_server.py --node-host 192.168.1.50 --connect
     python3 run_server.py --serial /dev/ttyACM0 --connect
-    python3 run_server.py --set-password
+    python3 run_s: erver.py --set-password
     python3 run_server.py --make-cert            # HTTPS (porta 8443) com CA local
     python3 run_server.py --https-port 9443      # mudar a porta HTTPS
     python3 run_server.py --no-tls               # só HTTP

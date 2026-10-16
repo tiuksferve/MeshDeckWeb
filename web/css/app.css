@@ -165,6 +165,8 @@ button[type="submit"] { border-color: var(--green); color: var(--green); }
   border: 1px solid var(--border); white-space: nowrap;
 }
 .pill.on { color: var(--green); border-color: var(--green); }
+.pill-short { display: none; }
+#node-short { display: none; }
 .pill.off { color: var(--muted); }
 .pill.wait { color: var(--orange); border-color: var(--orange); }
 .pill.connect {
@@ -433,6 +435,13 @@ tbody tr:hover td { background: var(--input); }
     padding-right: max(10px, env(safe-area-inset-right));
   }
   #packet-stats, #node-label { display: none; }
+  /* Nome curto do nó local ao lado da ligação, como nos cartões. O botão
+     usa o rótulo curto para caber na linha. */
+  #node-short { display: inline-flex; }
+  #node-short:empty { display: none; }
+  .pill-full { display: none; }
+  .pill-short { display: inline; }
+  #conn-state { display: inline-block; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
   /* Primeira linha: marca, ligação e menu. Segunda: pesquisa a toda a largura. */
   .search { order: 10; flex: 1 1 100%; width: auto; max-width: none; }
   .pill.connect { padding: 4px 10px; }

@@ -49,6 +49,21 @@ export function nodeBadge(node) {
   return `<span class="node-badge" style="--hue:${nodeHue(node.id_string)}">${escapeHtml(label)}</span>`;
 }
 
+/* Texto do botão de ligação. No telemóvel (short=true) cabe numa linha ao
+   lado do nome curto: /dev/cu.usbmodem1101 → usb1101, /dev/ttyACM0 → ACM0,
+   e a porta TCP só aparece se não for a 4403 de sempre. */
+export function connectionLabel(target, short = false) {
+  if (!target) return '';
+  if (target.mode === 'serial') {
+    const port = target.serial_port || '';
+    if (!short) return port;
+    return port.replace(/^\/dev\//, '').replace(/^(cu|tty)\./, '').replace(/^tty(?=[A-Z])/, '')
+      .replace(/^usb(modem|serial)-?/i, 'usb');
+  }
+  if (!short) return `${target.host}:${target.port}`;
+  return Number(target.port) === 4403 ? `${target.host}` : `${target.host}:${target.port}`;
+}
+
 export function fmtDistance(km) {
   if (km == null) return '—';
   if (km < 1) return `${Math.round(km * 1000)} m`;

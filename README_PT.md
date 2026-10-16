@@ -40,8 +40,9 @@ igualmente bem num browser de computador.
 
 ### 📋 Nós
 
-- Todos os nós visíveis, actualizados em tempo real, com o **nó local** e os
-  **favoritos** (guardados no firmware do nó) fixos no topo
+- Todos os nós visíveis, actualizados em tempo real, com os **favoritos**
+  (guardados no firmware do nó) fixos no topo; o **nó local** fica no
+  cabeçalho, ao lado do botão de ligação
 - **Cartões** no telemóvel e no computador, ou uma **tabela** compacta no computador
 - Ponto de frescura colorido, SNR, hops, bateria, MQTT/RF e modelo de hardware
 - Acções rápidas: ⭐ favorito · 💬 DM · 📍 ver no mapa · 📡 traceroute ·

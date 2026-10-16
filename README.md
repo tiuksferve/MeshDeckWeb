@@ -40,8 +40,9 @@ well on a desktop browser.
 
 ### 📋 Nodes
 
-- Every visible node, updated live, with the **local node** and
-  **favourites** (stored in the node firmware) pinned at the top
+- Every visible node, updated live, with **favourites** (stored in the node
+  firmware) pinned at the top; the **local node** sits in the header, next to
+  the connection button
 - **Cards** on phone and desktop, or a compact **table** on desktop
 - Coloured freshness dot, SNR, hops, battery, MQTT/RF and hardware model
 - Quick actions: ⭐ favourite · 💬 DM · 📍 show on map · 📡 traceroute ·

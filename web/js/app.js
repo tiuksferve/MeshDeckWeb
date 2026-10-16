@@ -10,7 +10,7 @@
 import { api, postJSON, getJSON } from './api.js';
 import { store } from './store.js';
 import { connectSocket, commands } from './socket.js';
-import { debounce, escapeHtml, MOBILE_QUERY } from './utils.js';
+import { connectionLabel, debounce, escapeHtml, MOBILE_QUERY, nodeBadge } from './utils.js';
 import { getLanguage, loadLanguage, t } from './i18n.js';
 
 import * as NodesTab from './tabs/nodes.js';
@@ -223,16 +223,20 @@ function renderConnectionState() {
   const reconnect = store.reconnect;
 
   if (connected) {
-    pill.textContent = target?.mode === 'serial'
-      ? `🟢 ${target.serial_port}` : `🟢 ${target?.host}:${target?.port}`;
+    // As duas versões ficam no botão; o CSS mostra a curta no telemóvel.
+    pill.innerHTML = `<span class="pill-full">🟢 ${escapeHtml(connectionLabel(target))}</span>`
+      + `<span class="pill-short">🟢 ${escapeHtml(connectionLabel(target, true))}</span>`;
+    pill.title = connectionLabel(target);
     pill.className = 'pill on';
   } else if (reconnect?.attempt > 0) {
     pill.textContent = t('tentativa {n}', { n: reconnect.attempt });
+    pill.title = '';
     pill.className = 'pill wait';
   } else {
     // Sem ligação, o pill é o ponto de entrada para ligar ao nó: tem de se
     // ver como um botão, não como um estado.
     pill.textContent = t('Conectar');
+    pill.title = '';
     pill.className = 'pill connect';
   }
   pill.onclick = () => {
@@ -258,6 +262,10 @@ function renderNodeLabel() {
   const local = store.localNode || {};
   $('node-label').textContent = local.node_id
     ? `🏠 ${local.long_name || local.node_id} [${local.short_name || ''}]` : '';
+  // No telemóvel, só o nome curto, como nos cartões (o nome completo vai no title).
+  const short = $('node-short');
+  short.innerHTML = local.node_id ? nodeBadge({ ...local, id_string: local.node_id }) : '';
+  short.title = local.node_id ? `🏠 ${local.long_name || local.node_id}` : '';
 }
 
 function renderPacketStats() {

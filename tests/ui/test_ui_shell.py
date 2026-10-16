@@ -43,7 +43,7 @@ def test_nodes_list_shows_seeded_nodes(page, view):
     page.wait_for(f"document.querySelector('{container} [data-id=\"{node_id(1)}\"]')?.offsetParent")
     assert page.text("#n-total") == "12"
     ids = page.js(VISIBLE_NODES)
-    assert len(ids) == 12 and ids[0] == node_id(0), "o nó local vem primeiro"
+    assert len(ids) == 11 and node_id(0) not in ids, "o nó local fica no cabeçalho, não na lista"
     assert "Estação Norte" in page.text(f"{container} [data-id=\"{node_id(1)}\"]")
     page.click("#nodes-view [data-view=cards]")
 
@@ -55,11 +55,10 @@ def search(page, text):
 
 def test_search_filters_nodes(page):
     search(page, "sintra")
-    # O nó local fica sempre na lista; dos outros só sobra o Sintra Repetidor.
-    page.wait_for(f"JSON.stringify({VISIBLE_NODES}) === JSON.stringify(['{node_id(0)}', '{node_id(2)}'])",
-                  message="a pesquisa não deixou só o nó local e o Sintra Repetidor")
+    page.wait_for(f"JSON.stringify({VISIBLE_NODES}) === JSON.stringify(['{node_id(2)}'])",
+                  message="a pesquisa não deixou só o Sintra Repetidor")
     search(page, "")
-    page.wait_for(f"{VISIBLE_NODES}.length === 12")
+    page.wait_for(f"{VISIBLE_NODES}.length === 11")
 
 
 @pytest.mark.parametrize("tab", TABS)
@@ -77,6 +76,43 @@ def test_phone_layout_has_no_horizontal_scroll(page, tab):
     page.wait_for("new Promise((r) => setTimeout(() => r(true), 600))")
     width = page.js("document.documentElement.scrollWidth")
     assert width <= 390, f"a aba {tab} transborda: {width}px de largura num ecrã de 390px"
+
+
+def test_connection_label_is_short_on_phones(page):
+    cases = page.js("""import('/js/utils.js').then(({connectionLabel: c}) => [
+        c({mode: 'serial', serial_port: '/dev/cu.usbmodem1101'}, true),
+        c({mode: 'serial', serial_port: '/dev/ttyACM0'}, true),
+        c({mode: 'serial', serial_port: '/dev/cu.usbserial-0001'}, true),
+        c({mode: 'serial', serial_port: 'COM3'}, true),
+        c({mode: 'serial', serial_port: '/dev/cu.usbmodem1101'}),
+        c({mode: 'tcp', host: 'localhost', port: 4403}, true),
+        c({mode: 'tcp', host: '192.168.1.50', port: 4500}, true),
+        c({mode: 'tcp', host: 'localhost', port: 4403})])""")
+    assert cases == ["usb1101", "ACM0", "usb0001", "COM3", "/dev/cu.usbmodem1101",
+                     "localhost", "192.168.1.50:4500", "localhost:4403"]
+
+
+def test_phone_header_shows_local_short_name_on_the_connection_line(page):
+    page.viewport(390, 844, mobile=True, touch=True)
+    saved = page.js("import('/js/store.js').then(({store}) => JSON.stringify(store.connection))")
+    try:
+        page.js("""import('/js/store.js').then(({store}) => store.applyConnection({connected: true,
+            target: {mode: 'serial', serial_port: '/dev/cu.usbmodem1101'}, bridge: {}, node_ready: true}))""")
+        page.wait_for("document.getElementById('conn-state').innerText.trim() === '🟢 usb1101'",
+                      message="o botão de ligação não mostrou o rótulo curto")
+        assert page.js("document.querySelector('#node-short .node-badge')?.innerText") == "BL"
+        # Botão e nome curto na mesma linha, sem quebra.
+        tops = page.js("['brand', 'conn-state', 'node-short'].map((c) =>"
+                       " (document.getElementById(c) || document.querySelector('.' + c)).getBoundingClientRect().top)")
+        assert abs(tops[1] - tops[2]) < 8 and abs(tops[0] - tops[1]) < 12, tops
+        # O nó local já está no cabeçalho: não aparece na lista.
+        ids = page.js(VISIBLE_NODES)
+        assert node_id(0) not in ids and node_id(1) in ids
+    finally:
+        page.js(f"import('/js/store.js').then(({{store}}) => store.applyConnection({saved}))")
+        page.viewport(1280, 820)
+    assert not page.js("document.getElementById('node-short').offsetParent"), "no desktop fica o nome completo"
+    assert page.text("#node-label") == "🏠 Base Lisboa [BL]"
 
 
 def test_language_switch_translates_the_interface(page):

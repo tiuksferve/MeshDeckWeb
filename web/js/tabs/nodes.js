@@ -210,7 +210,6 @@ function render() {
     store.nodeList().filter((n) => n.latitude != null && n.longitude != null).length;
 
   nodes.sort((a, b) => {
-    if (a.is_local !== b.is_local) return a.is_local ? -1 : 1;
     const favA = store.favorites.has(a.id_string);
     const favB = store.favorites.has(b.id_string);
     if (favA !== favB) return favA ? -1 : 1;
