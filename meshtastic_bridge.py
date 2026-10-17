@@ -19,7 +19,6 @@ import socket
 import struct
 import sys
 import threading
-import time
 
 import serial
 import serial.tools.list_ports

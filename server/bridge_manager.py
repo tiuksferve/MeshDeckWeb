@@ -1,13 +1,10 @@
 """
 server/bridge_manager.py — Ciclo de vida da ponte USB→TCP.
 
-No desktop o utilizador clicava "Arrancar ponte serial" antes de ligar. Num
-servidor isso não funciona: a ponte tem de ser arrancada pelo processo que
-serve a interface, e tem de morrer com ele, senão fica a segurar a porta
-serial depois de o servidor sair.
+A ponte é arrancada pelo processo que serve a interface e morre com ele;
+senão ficaria a segurar a porta serial depois de o servidor sair.
 
-meshtastic_bridge.py não precisou de alterações: corre como subprocesso, tal
-como já corria pela linha de comandos.
+meshtastic_bridge.py corre como subprocesso, tal como pela linha de comandos.
 """
 
 import logging

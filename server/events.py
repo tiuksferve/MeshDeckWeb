@@ -18,7 +18,7 @@ Duas decisões que divergem de um encaminhamento cego dos sinais:
     sem perder funcionalidade.
 """
 
-from core.serialize import to_epoch, to_jsonable
+from core.serialize import to_epoch
 
 # ── Servidor -> cliente ─────────────────────────────────────────────────────
 SNAPSHOT        = "snapshot"          # estado completo, ao ligar ou após reload
@@ -27,7 +27,6 @@ RECONNECT       = "reconnect"         # contagem do backoff de reconexão
 ERROR           = "error"             # mensagem de erro para toast
 LOG             = "log"               # linha de log para a consola
 NODES           = "nodes"             # lote de nós criados ou actualizados
-NODE_REMOVED    = "node_removed"      # após reset da NodeDB
 LOCAL_NODE      = "local_node"        # metadados do nó local
 LOCAL_POSITION  = "local_position"    # resultado do refresh de posição
 MY_NODE_ID      = "my_node_id"        # ID canónico do nó local
@@ -39,12 +38,11 @@ TRACEROUTE      = "traceroute"        # resultado de um traceroute
 NEIGHBORS       = "neighbors"         # vizinhança NeighborInfo
 POSITION_SENT   = "position_sent"     # resultado do envio de posição
 PACKET          = "packet"            # projecção compacta de um pacote
-PACKET_STATS    = "packet_stats"      # SNR médio e pacotes/min da barra de estado
+PACKET_STATS    = "packet_stats"      # SNR médio e pacotes/min do cabeçalho
 NODEDB_RESET    = "nodedb_reset"      # a NodeDB do nó foi limpa
 NODE_READY      = "node_ready"        # a configuração do nó já pode ser lida
 SNR_LEVELS      = "snr_levels"        # limiares de cor do SNR para o preset do nó
 CONFIG_LOCK     = "config_lock"       # quem está a gravar configuração
-METRICS         = "metrics"           # HTML de uma secção de métricas
 UNREAD          = "unread"            # contadores de não-lidas, após marcar como lida
 FAVORITES       = "favorites"         # lista completa de favoritos, após alterar um
 
@@ -60,8 +58,6 @@ CMD_REFRESH_POSITION = "refresh_local_position"
 CMD_RESET_NODEDB     = "reset_nodedb"
 CMD_TOGGLE_FAVORITE  = "toggle_favorite"
 CMD_SET_LANGUAGE     = "set_language"
-CMD_SAVE_CONFIG      = "save_config"
-CMD_SAVE_CHANNELS    = "save_channels"
 CMD_REQUEST_SNAPSHOT = "request_snapshot"
 CMD_CLEAR_METRICS    = "clear_metrics"
 CMD_MARK_READ        = "mark_read"
@@ -78,8 +74,10 @@ def reconnect_status(attempt: int, delay_s: int) -> dict:
     return {"attempt": int(attempt), "delay_s": int(delay_s)}
 
 
-def error_occurred(message: str) -> dict:
-    return {"message": str(message)}
+def error_occurred(message) -> dict:
+    """Um LazyText fica por traduzir: o broadcast traduz uma vez por idioma."""
+    from i18n import LazyText
+    return {"message": message if isinstance(message, LazyText) else str(message)}
 
 
 def my_node_id_ready(node_id: str) -> dict:
@@ -168,7 +166,3 @@ def packet_projection(packet: dict) -> dict:
         "time":     to_epoch(packet.get("rxTime")),
     }
 
-
-def node_detail(packet: dict) -> dict:
-    """Pacote completo, para o diálogo de detalhe de um nó."""
-    return to_jsonable(packet)

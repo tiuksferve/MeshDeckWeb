@@ -1,9 +1,8 @@
 """
 server/auth.py — Autenticação do servidor.
 
-A aplicação desktop era de utilizador único na própria máquina. Um servidor
-na rede local expõe escrita completa da configuração do nó, incluindo nomes
-de canais e PSK, por isso há uma password.
+Um servidor na rede local expõe escrita completa da configuração do nó,
+incluindo nomes de canais e PSK, por isso há uma password.
 
 Na primeira execução é gerada uma password aleatória e impressa na consola;
 só o seu hash fica em disco. O utilizador pode trocá-la depois.

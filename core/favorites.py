@@ -66,18 +66,5 @@ class FirmwareFavorites:
         except Exception as e:
             logger.warning(f"FirmwareFavorites._send_to_firmware: {e}")
 
-    def sync_from_firmware(self):
-        """Re-lê os favoritos do firmware (útil após reconexão)."""
-        self.set_interface(self._iface)
-
     def get_all(self) -> Set[str]:
         return set(self._favorites)
-
-    # Compatibilidade com código antigo que injectava nós de um ficheiro local.
-    def get_all_nodes_data(self) -> list:
-        """Retorna lista vazia — já não injectamos nós do ficheiro local."""
-        return []
-
-    def update_node_data(self, node_id: str, node_data: Dict):
-        """No-op — não guardamos dados localmente."""
-        pass

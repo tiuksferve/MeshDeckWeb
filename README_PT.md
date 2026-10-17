@@ -113,7 +113,9 @@ Os gráficos actualizam-se em tempo real, sem recarregar a página.
 - Protecção contra tentativas de adivinhar a password: ao fim de 5 falhas o
   endereço fica bloqueado durante algum tempo (1 minuto, a dobrar até 15)
 - Vários dispositivos ao mesmo tempo, todos sincronizados em tempo real
-- Português e English, escolhidos no menu ☰
+- Português e English, **por dispositivo**: cada browser segue a sua
+  língua e pode trocá-la no menu ☰ sem mudar a dos outros; datas e horas
+  seguem a língua escolhida (e a região do dispositivo)
 
 ---
 
@@ -309,7 +311,7 @@ As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`
 | Ficheiro | Conteúdo |
 |----------|----------|
 | `server.json` | Chave de sessão, hash da password, endereço, definições HTTPS |
-| `settings.json` | Idioma e outras preferências |
+| `settings.json` | Idioma do servidor (terminal, logs) e outras preferências |
 | `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
 
 Os mosaicos do mapa offline ficam em `~/.cache/meshdeck/tiles/` (ou

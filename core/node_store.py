@@ -1,18 +1,16 @@
 """
-core/node_store.py — Estado dos nós da rede, sem Qt.
+core/node_store.py — Estado dos nós da rede.
 
-Substitui NodeTableModel. O modelo Qt guardava os nós numa lista porque a
-vista precisava de números de linha; aqui a chave é o id_string e a ordenação
-e filtragem passam para o cliente, que é quem tem o contexto da coluna
-escolhida pelo utilizador.
+A chave é o id_string; a ordenação e a filtragem ficam no cliente, que é
+quem sabe o que o utilizador escolheu ver.
 
-_safe_update vem de models.py sem alterações: é a regra de fusão que impede
-uma actualização parcial de apagar campos válidos, e um lastHeard=0 do NodeDB
-de sobrescrever um last_heard real.
+_safe_update é a regra de fusão que impede uma actualização parcial de
+apagar campos válidos, e um lastHeard=0 do NodeDB de sobrescrever um
+last_heard real.
 """
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from constants import logger
 from core.serialize import to_epoch, to_jsonable
@@ -84,8 +82,8 @@ def node_record_from_nodedb(num, node: dict) -> Optional[tuple]:
     """Converte uma entrada do nodesByNum no registo usado pelo store.
 
     Devolve (id_string, dados) ou None se não for possível determinar um ID.
-    Esta conversão estava duplicada entre o _emit_node do worker e o
-    _on_nodes_batch da janela principal; é a mesma em ambos os sítios.
+    Usada tanto pelo _emit_node do worker como pelo lote inicial de nós,
+    para os dois caminhos darem exactamente o mesmo registo.
     """
     if not isinstance(node, dict):
         return None
@@ -209,16 +207,13 @@ class NodeStore:
     def all(self) -> List[Dict[str, Any]]:
         return list(self._nodes.values())
 
-    def ids(self) -> Set[str]:
-        return set(self._nodes)
-
     def count(self) -> int:
         return len(self._nodes)
 
     def contacted_count(self) -> int:
         """Nós já contactados (com last_heard), excluindo o nó local.
 
-        É o total que a barra de estado mostra; é independente da pesquisa.
+        É o total "contactados" da aba Nós; é independente da pesquisa.
         """
         return sum(1 for n in self._nodes.values()
                    if isinstance(n.get("last_heard"), datetime)

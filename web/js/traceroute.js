@@ -1,12 +1,11 @@
 /*
  * web/js/traceroute.js — Fluxo do traceroute com as mensagens ao utilizador.
  *
- * Espelha _send_traceroute e _on_traceroute_result do main.py do desktop:
- * validação antes de enviar (ligado? outro em curso? já existe para este
+ * Validação antes de enviar (ligado? outro em curso? já existe para este
  * nó?), aviso com contagem decrescente enquanto se espera a resposta, e a
  * janela "Resultado do Traceroute" com cada hop, SNR e o botão para ver a
  * rota no mapa. Um traceroute que outro nó fez ao nó local pergunta antes
- * de abrir o resultado, como no desktop.
+ * de abrir o resultado.
  *
  * O desenho no mapa continua em tabs/map.js; aqui só se trata do diálogo.
  */
@@ -17,7 +16,7 @@ import { commands } from './socket.js';
 import { t } from './i18n.js';
 import { escapeHtml, showDialog } from './utils.js';
 
-const WAIT_S = 30;   // o mesmo intervalo do desktop entre traceroutes
+const WAIT_S = 30;   // espera mínima entre traceroutes
 
 let pending = null;          // { nodeId, name } do traceroute enviado por nós
 let countdown = 0;
@@ -77,8 +76,7 @@ export async function requestTraceroute(nodeId) {
   startCountdown(t('📡 Traceroute enviado para {name} — aguardando resposta…', { name }));
 }
 
-/* Aviso no canto com os segundos que faltam, como a barra de estado do
-   desktop. Desaparece ao chegar a zero ou quando chega a resposta. */
+/* Aviso no canto com os segundos que faltam. Desaparece ao chegar a zero ou quando chega a resposta. */
 function startCountdown(text, seconds = WAIT_S) {
   stopCountdown();
   countdown = seconds;
@@ -110,8 +108,8 @@ function flash(text) {
   setTimeout(() => el.remove(), 6000);
 }
 
-/* origin = quem fez o pedido, dest = quem respondeu (como no protocolo e no
-   desktop). É "nosso" se a origem é o nó local e o destino o nó pedido. */
+/* origin = quem fez o pedido, dest = quem respondeu (como no protocolo).
+   É "nosso" se a origem é o nó local e o destino o nó pedido. */
 async function onResult(payload) {
   const { origin, dest } = payload;
   const forward = payload.forward || [];

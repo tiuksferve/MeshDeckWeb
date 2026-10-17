@@ -1,16 +1,15 @@
 /*
- * web/js/tabs/metrics.js — Aba de métricas (11 secções).
+ * web/js/tabs/metrics.js — Aba de métricas (12 secções).
  *
- * O servidor já gera o HTML completo de cada secção (Chart.js incluído) em
- * core/metrics.py, exactamente como o QWebEngineView injectava no desktop.
- * Aqui isola-se num <iframe>: o HTML referencia globais próprias
+ * O servidor gera o HTML completo de cada secção (Chart.js incluído) em
+ * core/metrics.py. Aqui isola-se num <iframe>: o HTML referencia globais próprias
  * (window.Chart, funções auxiliares) que colidiriam com a página principal
  * se fossem injectadas directamente via innerHTML — e um <script> inserido
  * por innerHTML não executa de qualquer forma.
  *
  * O HTML carrega-se uma vez por secção. Depois, a cada REFRESH_MS, só os
- * dados vêm do servidor e entram por window._metricsUpdateData — a mesma
- * função que o desktop chama via runJavaScript — sem recarregar a página,
+ * dados vêm do servidor e entram por window._metricsUpdateData, sem
+ * recarregar a página,
  * por isso o scroll e o estado dos gráficos ficam onde o utilizador os
  * deixou. Recarrega-se apenas quando não há alternativa (ver tick()).
  */
@@ -43,7 +42,7 @@ export function mount() {
   // secção é gerado no servidor, no idioma activo, por isso recarrega-se,
   // mas mantendo a posição de scroll.
   store.on('snapshot', () => { renderSectionList(); if (visible) loadFrame({ keepScroll: true }); });
-  // A pesquisa global filtra as tabelas da secção, como no desktop.
+  // A pesquisa global filtra as tabelas da secção.
   store.on('search-changed', applyFilter);
 
   document.getElementById('metrics-frame').addEventListener('load', onFrameLoad);
@@ -120,8 +119,7 @@ function applyFilter() {
   } catch { /* página ainda a carregar */ }
 }
 
-/* Um ciclo de actualização. Recarrega o HTML só em dois casos, tal como o
-   desktop: a secção saiu do ecrã de espera (que não tem gráficos), ou é o
+/* Um ciclo de actualização. Recarrega o HTML só em dois casos: a secção saiu do ecrã de espera (que não tem gráficos), ou é o
    nó local e um dos seus valores mudou (essa página não tem actualização
    incremental). Em todos os outros, os dados entram na página já aberta. */
 async function tick() {

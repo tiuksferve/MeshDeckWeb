@@ -11,19 +11,21 @@ painel vai por HTTP, onde cabe uma resposta grande e uma só vez; o que chega
 sem ser pedido vai por Socket.IO, difundido a todos os clientes.
 """
 
+import contextlib
 import logging
 import secrets
 import os
 from datetime import timedelta
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
-from flask_socketio import SocketIO, disconnect
+from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory, session
+from flask_socketio import SocketIO, disconnect, join_room, leave_room
 
 from constants import APP_NAME
 from core.config_defs import MESHTASTIC_CONFIG_DEFS, get_section_label
 from core.metrics import SECTION_KEYS
 from core.serialize import safe_utf8_text
-from i18n import get_language, tr
+from i18n import (LANGUAGES, get_language, has_lazy, normalize_language, parse_date_style, resolve, tr,
+                  use_date_style, use_language)
 from server import events as ev
 from server import tls
 from server.tile_cache import TileCache
@@ -63,6 +65,18 @@ def config_defs_json() -> list:
     return sections
 
 
+# Idioma de cada dispositivo: o browser guarda-o neste cookie e manda-o em
+# todos os pedidos (HTML das métricas, configuração, erros) e no Socket.IO.
+LANG_COOKIE = "meshdeck_lang"
+DATE_COOKIE = "meshdeck_dates"   # formato de data e hora, ex. "en-US.mdy.12"
+
+
+def request_language() -> str:
+    """Idioma do dispositivo que fez o pedido; sem escolha, o do servidor."""
+    lang = request.cookies.get(LANG_COOKIE)
+    return lang if lang in LANGUAGES else get_language()
+
+
 def i18n_catalog(language: str) -> dict:
     """Catálogo de traduções do idioma pedido, para o browser traduzir sozinho."""
     from i18n import _STRINGS
@@ -88,11 +102,31 @@ def create_app(config: ServerConfig = None) -> tuple:
     socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[])
 
     def broadcast(event: str, payload: dict):
-        socketio.emit(event, payload)
+        # Um texto por traduzir (LazyText) vai a cada sala de idioma já
+        # traduzido; o resto vai igual para todos.
+        if not has_lazy(payload):
+            socketio.emit(event, payload)
+            return
+        for lang in LANGUAGES:
+            with use_language(lang):
+                socketio.emit(event, resolve(payload), to=f"lang:{lang}")
 
     mesh = MeshSession(broadcast, config)
     app.mesh = mesh
     app.server_config = config
+    client_languages = {}            # sid do Socket.IO -> idioma do dispositivo
+
+    @app.before_request
+    def enter_device_language():
+        g.device_language = contextlib.ExitStack()
+        g.device_language.enter_context(use_language(request_language()))
+        g.device_language.enter_context(use_date_style(parse_date_style(request.cookies.get(DATE_COOKIE))))
+
+    @app.teardown_request
+    def leave_device_language(_error=None):
+        context = g.pop("device_language", None)
+        if context is not None:
+            context.close()
 
     # ------------------------------------------------------------------
     # Frontend estático
@@ -189,7 +223,7 @@ def create_app(config: ServerConfig = None) -> tuple:
     def api_whoami():
         return jsonify({"authenticated": is_authenticated(),
                         "app": APP_NAME,
-                        "language": get_language(),
+                        "language": request_language(),
                         # Porta HTTPS, para a página em HTTP indicar onde a bússola funciona.
                         "https_port": config.https_port if config.tls_enabled else None})
 
@@ -205,7 +239,7 @@ def create_app(config: ServerConfig = None) -> tuple:
     # precisa de ser traduzido.
     @app.get("/api/i18n")
     def api_i18n():
-        lang = request.args.get("lang") or get_language()
+        lang = normalize_language(request.args.get("lang") or request_language())
         return jsonify({"language": lang, "strings": i18n_catalog(lang)})
 
     @app.get("/api/config/defs")
@@ -336,12 +370,17 @@ def create_app(config: ServerConfig = None) -> tuple:
             logger.warning("socket rejeitado por falta de sessão (%s)", request.remote_addr)
             return False
         logger.info("cliente ligado: %s", request.sid)
-        socketio.emit(ev.SNAPSHOT, mesh.snapshot(), to=request.sid)
+        lang = request_language()
+        client_languages[request.sid] = lang
+        join_room(f"lang:{lang}")
+        with use_language(lang):
+            socketio.emit(ev.SNAPSHOT, mesh.snapshot(), to=request.sid)
 
     @socketio.on("disconnect")
     def on_disconnect():
         # Um cliente que fecha o separador não pode deixar o nó bloqueado.
         mesh.config_lock.release_if_held(request.sid)
+        client_languages.pop(request.sid, None)
         socketio.emit(ev.CONFIG_LOCK, mesh.config_lock.state())
         logger.info("cliente desligado: %s", request.sid)
 
@@ -354,7 +393,8 @@ def create_app(config: ServerConfig = None) -> tuple:
             if not is_authenticated():
                 disconnect()
                 return None
-            return handler(*args, **kwargs)
+            with use_language(client_languages.get(request.sid)):
+                return handler(*args, **kwargs)
         return wrapper
 
     @socketio.on(ev.CMD_REQUEST_SNAPSHOT)
@@ -436,8 +476,15 @@ def create_app(config: ServerConfig = None) -> tuple:
     @socketio.on(ev.CMD_SET_LANGUAGE)
     @authed
     def on_set_language(data):
-        payload = mesh.set_language((data or {}).get("language", "en"))
-        socketio.emit(ev.SNAPSHOT, mesh.snapshot())
-        return payload
+        """Só muda o idioma deste dispositivo (o browser já gravou o cookie)."""
+        lang = normalize_language((data or {}).get("language"))
+        old = client_languages.get(request.sid)
+        if old:
+            leave_room(f"lang:{old}")
+        client_languages[request.sid] = lang
+        join_room(f"lang:{lang}")
+        with use_language(lang):
+            socketio.emit(ev.SNAPSHOT, mesh.snapshot(), to=request.sid)
+        return mesh.metric_sections(lang)
 
     return app, socketio, mesh

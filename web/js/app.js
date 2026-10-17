@@ -3,7 +3,7 @@
  *
  * Cada aba vive no seu próprio módulo em js/tabs/ e subscreve o store
  * directamente; este ficheiro só trata do que é transversal — autenticação,
- * troca de abas, barra de estado, consola, idioma e toasts de erro.
+ * troca de abas, cabeçalho, consola, idioma e toasts de erro.
  */
 'use strict';
 
@@ -11,7 +11,7 @@ import { api, postJSON, getJSON } from './api.js';
 import { store } from './store.js';
 import { connectSocket, commands } from './socket.js';
 import { connectionLabel, debounce, escapeHtml, MOBILE_QUERY, nodeBadge } from './utils.js';
-import { getLanguage, loadLanguage, t } from './i18n.js';
+import { getLanguage, loadLanguage, preferredLanguage, rememberLanguage, t } from './i18n.js';
 
 import * as NodesTab from './tabs/nodes.js';
 import * as MapTab from './tabs/map.js';
@@ -34,15 +34,18 @@ const TABS = {
 };
 
 let activeTab = 'nodes';
-let wantedLanguage = null;   // escolhido aqui, ainda não confirmado pelo servidor
 
 /* ── arranque ─────────────────────────────────────────────────────────── */
 
 async function boot() {
   const { data } = await api('/api/whoami');
   store.httpsPort = data.https_port || null;   // HTTPS ao lado, para a bússola
-  await loadLanguage(data.language);
-  setLanguageUi(data.language);
+  // A língua é deste dispositivo; o cookie vai antes de qualquer pedido que
+  // devolva texto traduzido no servidor (e antes do Socket.IO).
+  const lang = preferredLanguage();
+  rememberLanguage(lang);
+  await loadLanguage(lang);
+  setLanguageUi(lang);
   if (data.authenticated) {
     showApp();
   } else {
@@ -164,12 +167,13 @@ function wireHeader() {
   const search = $('search');
   search.addEventListener('input', debounce(() => store.setSearchText(search.value), 150));
 
-  // O catálogo carrega primeiro; o snapshot que o servidor devolve a seguir
-  // já redesenha tudo com os textos novos.
+  // Muda só este dispositivo. O catálogo carrega primeiro; o snapshot que o
+  // servidor devolve a seguir (só a este cliente) traz as secções das
+  // métricas e recarrega o que é gerado no servidor.
   $('lang-seg').addEventListener('click', async (event) => {
     const lang = event.target.closest('[data-lang]')?.dataset.lang;
-    if (!lang || lang === (wantedLanguage || getLanguage())) return;
-    wantedLanguage = lang;
+    if (!lang || lang === getLanguage()) return;
+    rememberLanguage(lang);
     setLanguageUi(lang);
     await switchLanguage(lang);
     commands.setLanguage(lang);
@@ -181,16 +185,11 @@ function wireHeader() {
   $('console-close').addEventListener('click', () => { $('console-drawer').hidden = true; });
 
   store.on('snapshot', (snapshot) => {
-    // O idioma é do servidor: se outro cliente o mudou, este acompanha.
-    // Excepto se este cliente pediu outro e o servidor ainda não o aplicou
-    // (o comando perde-se com o socket em baixo, e o snapshot de (re)ligação
-    // traz o idioma antigo): aí reenvia-se o pedido em vez de reverter.
-    if (wantedLanguage && snapshot.language !== wantedLanguage) {
-      commands.setLanguage(wantedLanguage);
-    } else if (snapshot.language) {
-      wantedLanguage = null;
-      setLanguageUi(snapshot.language);
-      switchLanguage(snapshot.language);
+    // O servidor responde na língua deste dispositivo (cookie). Se o comando
+    // de troca se perdeu com o socket em baixo, a religação já leva o cookie
+    // novo; um snapshot noutra língua só pode ser desse caso, e reenvia-se.
+    if (snapshot.language && getLanguage() && snapshot.language !== getLanguage()) {
+      commands.setLanguage(getLanguage());
     }
     $('console-log').textContent = (snapshot.log || []).join('\n') + '\n';
     $('console-log').scrollTop = $('console-log').scrollHeight;

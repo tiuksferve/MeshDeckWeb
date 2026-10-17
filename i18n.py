@@ -2,24 +2,150 @@
 i18n.py — Internacionalização do MeshDeck.
 
 Suporta Português (pt) e English (en).
-O idioma activo é definido em set_language() e lido via tr().
+
+Há dois níveis de idioma:
+  * o do servidor (set_language), escolhido no instalador: terminal, logs e
+    omissão para quem não escolheu nenhum;
+  * o de cada dispositivo: cada pedido HTTP e cada comando Socket.IO corre
+    dentro de use_language(), e o tr() responde nesse idioma. Assim dois
+    browsers podem usar línguas diferentes ao mesmo tempo.
+
+Textos criados fora de um pedido (erros do worker, por exemplo) usam
+lazy_tr(): só são traduzidos ao enviar, uma vez por idioma.
 """
 
+import contextlib
+import contextvars
+import re
+from datetime import datetime
+
+LANGUAGES = ("pt", "en")
 _LANG = "en"   # default: English
+_REQUEST_LANG = contextvars.ContextVar("meshdeck_language", default=None)
+
+
+def normalize_language(lang) -> str:
+    return lang if lang in LANGUAGES else "en"
+
 
 def set_language(lang: str):
-    """Define o idioma activo. lang: 'en' ou 'pt'."""
+    """Define o idioma do servidor. lang: 'en' ou 'pt'."""
     global _LANG
-    _LANG = lang if lang in ("en", "pt") else "en"
+    _LANG = normalize_language(lang)
+
 
 def get_language() -> str:
+    """Idioma do servidor (o do instalador)."""
     return _LANG
+
+
+def current_language() -> str:
+    """Idioma em que o tr() está a responder agora."""
+    return _REQUEST_LANG.get() or _LANG
+
+
+@contextlib.contextmanager
+def use_language(lang):
+    """Traduz no idioma de um dispositivo durante o bloco."""
+    token = _REQUEST_LANG.set(normalize_language(lang) if lang else None)
+    try:
+        yield
+    finally:
+        _REQUEST_LANG.reset(token)
+
+
+class LazyText:
+    """Texto traduzido só quando é convertido em str (no idioma do momento)."""
+
+    def __init__(self, key: str, kwargs: dict):
+        self.key, self.kwargs = key, kwargs
+
+    def __str__(self):
+        return tr(self.key, **self.kwargs)
+
+    def __repr__(self):
+        return f"LazyText({self.key!r})"
+
+
+def lazy_tr(key: str, **kwargs) -> LazyText:
+    return LazyText(key, kwargs)
+
+
+def has_lazy(payload) -> bool:
+    return isinstance(payload, dict) and any(isinstance(v, LazyText) for v in payload.values())
+
+
+def resolve(payload: dict) -> dict:
+    """Cópia do payload com os LazyText traduzidos no idioma do momento."""
+    return {k: str(v) if isinstance(v, LazyText) else v for k, v in payload.items()}
+
+
+# ── Datas e horas ────────────────────────────────────────────────────────────
+# O browser escolhe o formato (o da região do dispositivo, se estiver na
+# língua escolhida; senão pt-PT ou en-US) e manda-o num cookie, por exemplo
+# "en-US.mdy.12" ou "pt-PT.dmy.24". Aqui só se aplica esse formato.
+_DATE_STYLE = contextvars.ContextVar("meshdeck_date_style", default=None)
+_DATE_STYLE_RE = re.compile(r"^([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\.(dmy|mdy|ymd)\.(12|24)$")
+_DEFAULT_DATE_STYLE = {"pt": ("pt-PT", "dmy", False), "en": ("en-US", "mdy", True)}
+
+
+def parse_date_style(value):
+    """(locale, ordem, relógio de 12 h) a partir do cookie, ou None."""
+    match = _DATE_STYLE_RE.match(value or "")
+    return (match.group(1), match.group(2), match.group(3) == "12") if match else None
+
+
+def date_style() -> tuple:
+    return _DATE_STYLE.get() or _DEFAULT_DATE_STYLE[current_language()]
+
+
+def date_locale() -> str:
+    """Locale para o Intl do JavaScript gerado no servidor (gráficos)."""
+    return date_style()[0]
+
+
+@contextlib.contextmanager
+def use_date_style(style):
+    token = _DATE_STYLE.set(style)
+    try:
+        yield
+    finally:
+        _DATE_STYLE.reset(token)
+
+
+def _as_datetime(value) -> datetime:
+    return value if isinstance(value, datetime) else datetime.fromtimestamp(value)
+
+
+def fmt_clock(value, seconds: bool = False) -> str:
+    """Hora no formato do dispositivo: 14:05 ou 2:05 PM."""
+    dt = _as_datetime(value)
+    tail = f":{dt.second:02d}" if seconds else ""
+    if date_style()[2]:
+        return f"{dt.hour % 12 or 12}:{dt.minute:02d}{tail} {'AM' if dt.hour < 12 else 'PM'}"
+    return f"{dt.hour:02d}:{dt.minute:02d}{tail}"
+
+
+def fmt_date(value) -> str:
+    """Data no formato do dispositivo: 17/10/2026, 10/17/2026 ou 2026-10-17."""
+    dt = _as_datetime(value)
+    order = date_style()[1]
+    if order == "ymd":
+        return f"{dt.year}-{dt.month:02d}-{dt.day:02d}"
+    if order == "mdy":
+        return f"{dt.month:02d}/{dt.day:02d}/{dt.year}"
+    return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
+
+
+def fmt_datetime(value, seconds: bool = False) -> str:
+    return f"{fmt_date(value)} {fmt_clock(value, seconds)}"
+
 
 def tr(key: str, **kwargs) -> str:
     """Devolve o texto no idioma activo.
     Os kwargs são substituídos nas chaves {nome} do texto.
     """
-    text = _STRINGS.get(key, {}).get(_LANG, key)
+    text = _STRINGS.get(key, {}).get(current_language(), key)
     if kwargs:
         try:
             text = text.format(**kwargs)
@@ -1034,4 +1160,22 @@ _STRINGS: dict = {
     "Quem entrar pode reconfigurar o nó, incluindo canais e PSK.": {"pt": "Quem entrar pode reconfigurar o nó, incluindo canais e PSK.", "en": "Anyone who logs in can reconfigure the node, channels and PSKs included."},
     "Em HTTP simples a sessão viaja em claro — use o endereço HTTPS": {"pt": "Em HTTP simples a sessão viaja em claro — use o endereço HTTPS", "en": "Over plain HTTP the session travels unencrypted — use the HTTPS address"},
     "(run_server.py --make-cert) ou uma rede de confiança.": {"pt": "(run_server.py --make-cert) ou uma rede de confiança.", "en": "(run_server.py --make-cert) or a trusted network."},
+    # Terminal do servidor (run_server.py)
+    "Nova password: ": {"pt": "Nova password: ", "en": "New password: "},
+    "Repita: ": {"pt": "Repita: ", "en": "Repeat: "},
+    "As passwords não coincidem.": {"pt": "As passwords não coincidem.", "en": "The passwords do not match."},
+    "Password recusada: {err}": {"pt": "Password recusada: {err}", "en": "Password rejected: {err}"},
+    "Password alterada.": {"pt": "Password alterada.", "en": "Password changed."},
+    "Password gerada (guarde-a, não volta a aparecer):": {"pt": "Password gerada (guarde-a, não volta a aparecer):", "en": "Generated password (save it, it will not be shown again):"},
+    "CA local criada:": {"pt": "CA local criada:", "en": "Local CA created:"},
+    "CA local reutilizada:": {"pt": "CA local reutilizada:", "en": "Local CA reused:"},
+    "HTTPS activado. Certificado do servidor válido até {date} para:": {"pt": "HTTPS activado. Certificado do servidor válido até {date} para:", "en": "HTTPS enabled. Server certificate valid until {date} for:"},
+    "Para ficar só em HTTP:": {"pt": "Para ficar só em HTTP:", "en": "To go back to plain HTTP only:"},
+    "HTTPS desactivado: no próximo arranque o servidor fica só em HTTP.": {"pt": "HTTPS desactivado: no próximo arranque o servidor fica só em HTTP.", "en": "HTTPS disabled: from the next start the server uses plain HTTP only."},
+    "--tls-cert e --tls-key têm de ser indicados juntos.": {"pt": "--tls-cert e --tls-key têm de ser indicados juntos.", "en": "--tls-cert and --tls-key must be given together."},
+    "Ficheiro não encontrado: {path}": {"pt": "Ficheiro não encontrado: {path}", "en": "File not found: {path}"},
+    "Ligação ao nó falhou: {err}": {"pt": "Ligação ao nó falhou: {err}", "en": "Connection to the node failed: {err}"},
+    "a encerrar…": {"pt": "a encerrar…", "en": "shutting down…"},
+    "cert_done_steps": {"pt": "Reinicie o servidor. O HTTP continua como antes, sem nada a instalar;\no HTTPS fica em  https://{address}/  para os dispositivos que querem\na bússola. Para não ver o aviso de segurança, instale a CA nesses\ndispositivos (só uma vez; mantém-se válida se voltar a gerar o certificado):\n\n  iPhone/iPad:  abra no Safari  https://{address}/ca.crt  (aceite o aviso),\n                Definições → Perfil descarregado → Instalar; depois\n                Definições → Geral → Informações → Definições de confiança\n                de certificados → activar \"MeshDeckWeb CA\".\n  Android:      descarregue /ca.crt e instale em Definições → Segurança →\n                Encriptação e credenciais → Instalar certificado → CA.\n  PC:           importe meshdeck-ca.crt como Autoridade de certificação\n                de raiz fidedigna (ou aceite o aviso do browser).",
+                        "en": "Restart the server. Plain HTTP stays as before, with nothing to install;\nHTTPS is at  https://{address}/  for the devices that want the\ncompass. To avoid the security warning, install the CA on those devices\n(only once; it stays valid if you create the certificate again):\n\n  iPhone/iPad:  open  https://{address}/ca.crt  in Safari (accept the warning),\n                Settings → Profile Downloaded → Install; then\n                Settings → General → About → Certificate Trust Settings\n                → turn on \"MeshDeckWeb CA\".\n  Android:      download /ca.crt and install it in Settings → Security →\n                Encryption & credentials → Install a certificate → CA.\n  PC:           import meshdeck-ca.crt as a Trusted Root Certification\n                Authority (or accept the browser warning)."},
 }

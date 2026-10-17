@@ -37,7 +37,7 @@ WAITING_SECTIONS = frozenset(
 
 # Campos do nó local cuja mudança obriga a redesenhar a secção: a página
 # local_node não tem actualização incremental, por isso só se recarrega
-# quando um destes muda (o mesmo critério do hash guard do desktop).
+# quando um destes muda.
 LOCAL_NODE_SIGNATURE_FIELDS = (
     "ch_util", "air_tx", "dc_est", "battery", "msgs_sent", "msgs_acked",
     "snr_rx_avg", "delivery", "ls_ts", "host_ts",
@@ -86,7 +86,6 @@ class MeshMetrics(MetricsDataMixin, MetricsRenderMixin):
         recarrega o HTML (o ecrã de espera não tem gráficos para actualizar).
         reload_key: só local_node; muda quando a secção tem de ser redesenhada.
         data: o que vai para window._metricsUpdateData nas restantes.
-        Replica a lógica de _refresh_current da aba do desktop.
         """
         if key not in SECTION_KEYS:
             raise KeyError(f"secção de métricas desconhecida: {key!r}")

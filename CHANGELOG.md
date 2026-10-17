@@ -46,6 +46,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **🍎 Installer on macOS:** with the firewall on, offers to allow Python
   through it (the rule must name the `Python.app` that actually listens);
   explains how to keep the IP from changing.
+- **🌍 Language per device.** Each browser starts in its own language
+  (Português if the device is in Portuguese, English otherwise) and can switch
+  in the ☰ menu; the choice is remembered on that device and no longer
+  changes the language of every other browser. Metrics, node configuration
+  and error messages from the server follow it too. The language chosen in
+  the installer stays for the terminal and the logs.
+- **📅 Dates and times follow the chosen language.** In Português:
+  17/10/2026 14:05. In English, the device's own region when it is set to
+  English (US 10/17/2026 2:05 PM, UK 17/10/2026 14:05), otherwise the US
+  format. Node list, messages, map and the metric charts all agree; before,
+  the metrics always used 24 h and day/month.
+- **🖥 Terminal messages in the installer's language**: `--make-cert` (with
+  the steps to install the CA), `--set-password`, `--no-tls` and the
+  connection and shutdown messages were Portuguese only.
+- **🧹 Code cleanup:** leftovers from the PyQt5 desktop application removed
+  — unused colour constants, Qt-compatibility aliases, unused methods and
+  events, comments that described the old application — and the logging
+  setup moved from an import side effect to the server start. No behaviour
+  change.
 - **🏠 Local node in the header, not in the node list.** On phones, its short
   name sits next to the connection button, shown like on the node cards; the
   button shortens the connection (`/dev/cu.usbmodem1101` → `usb1101`, port

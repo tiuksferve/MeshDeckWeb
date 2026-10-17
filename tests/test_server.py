@@ -414,24 +414,97 @@ def test_config_lock_expires(server, monkeypatch):
 
 # ── idioma ───────────────────────────────────────────────────────────────────
 
-def test_set_language_switches_metric_labels(server):
+def set_language_cookie(client, lang):
+    """O cookie que o browser grava ao escolher a língua (API do Werkzeug
+    mudou na 2.3: deixou de pedir o server_name)."""
+    import inspect
+    from server.app import LANG_COOKIE
+    if "server_name" in inspect.signature(client.set_cookie).parameters:
+        client.set_cookie("localhost", LANG_COOKIE, lang)
+    else:
+        client.set_cookie(LANG_COOKIE, lang)
+
+
+def test_metric_section_labels_per_language(server):
     mesh = server["mesh"]
-    pt = mesh.set_language("pt")
-    assert pt["language"] == "pt"
-    overview_pt = [s["label"] for s in pt["metric_sections"] if s["key"] == "overview"][0]
-    en = mesh.set_language("en")
-    overview_en = [s["label"] for s in en["metric_sections"] if s["key"] == "overview"][0]
-    assert overview_pt != overview_en
+    pt = mesh.metric_sections("pt")
+    en = mesh.metric_sections("en")
+    label = lambda payload: [s["label"] for s in payload["metric_sections"] if s["key"] == "overview"][0]
+    assert (pt["language"], label(pt)) == ("pt", "📊 Visão Geral")
+    assert (en["language"], label(en)) == ("en", "📊 Overview")
+    assert mesh.metric_sections("klingon")["language"] == "en"
 
 
-def test_unknown_language_falls_back(server):
-    assert server["mesh"].set_language("klingon")["language"] == "en"
+def test_http_answers_in_the_device_language(server):
+    """Cada browser manda o seu cookie: o mesmo servidor responde a um em PT
+    e a outro em EN, sem mudar o idioma do servidor."""
+    import i18n
+    login(server)
+    client = server["client"]
+    server_language = i18n.get_language()
+    texts = {}
+    for lang in ("pt", "en"):
+        set_language_cookie(client, lang)
+        texts[lang] = (client.get("/api/metrics/nope").get_json()["error"],
+                       client.get("/api/metrics/overview").get_data(as_text=True),
+                       client.get("/api/state").get_json())
+    assert texts["pt"][0].startswith("Secção de métricas desconhecida")
+    assert texts["en"][0].startswith("Unknown metrics section")
+    assert texts["pt"][1] != texts["en"][1]
+    assert texts["pt"][2]["language"] == "pt" and texts["en"][2]["language"] == "en"
+    assert i18n.get_language() == server_language
 
 
-def test_set_language_is_persisted(server):
-    from core.settings import settings
-    server["mesh"].set_language("pt")
-    assert settings().value("language") == "pt"
+@pytest.fixture
+def two_devices(tmp_path, monkeypatch):
+    """Dois browsers com sessão iniciada, um em PT e outro em EN."""
+    monkeypatch.setattr("core.settings._shared", Settings(directory=str(tmp_path)))
+    config = ServerConfig(Settings(filename="server.json", directory=str(tmp_path)))
+    app, socketio, mesh = create_app(config)
+    app.config["TESTING"] = True
+    devices = {}
+    for lang in ("pt", "en"):
+        http = app.test_client()
+        http.post("/api/login", json={"password": config.generated_password})
+        set_language_cookie(http, lang)
+        devices[lang] = socketio.test_client(app, flask_test_client=http)
+    yield app, mesh, devices
+    for device in devices.values():
+        device.disconnect()
+    mesh.shutdown()
+
+
+def received(device, event):
+    return [m["args"][0] for m in device.get_received() if m["name"] == event]
+
+
+def test_each_device_gets_its_own_language_over_socketio(two_devices):
+    _app, mesh, devices = two_devices
+    assert received(devices["pt"], "snapshot")[0]["language"] == "pt"
+    assert received(devices["en"], "snapshot")[0]["language"] == "en"
+
+    # Erros nascidos fora de um pedido (o rádio, o worker) chegam a cada um
+    # na sua língua.
+    mesh.send_channel_message(0, "olá")
+    assert received(devices["pt"], "error")[0]["message"].startswith("Não conectado")
+    assert received(devices["en"], "error")[0]["message"].startswith("Not connected")
+
+
+def test_switching_language_changes_only_that_device(two_devices):
+    import i18n
+    _app, mesh, devices = two_devices
+    server_language = i18n.get_language()
+    for device in devices.values():
+        device.get_received()
+
+    answer = devices["en"].emit("set_language", {"language": "pt"}, callback=True)
+    assert answer["language"] == "pt"
+    assert received(devices["en"], "snapshot")[0]["language"] == "pt"
+    assert received(devices["pt"], "snapshot") == [], "o outro dispositivo não recebe nada"
+    assert i18n.get_language() == server_language
+
+    mesh.send_channel_message(0, "olá")
+    assert received(devices["en"], "error")[0]["message"].startswith("Não conectado")
 
 
 # ── exportações usadas pelo frontend ─────────────────────────────────────────
@@ -765,3 +838,42 @@ def test_snr_levels_follow_the_node_preset(server):
     broadcasts.clear()
     mesh._on_interface_ready(iface)                                  # sem mudança, sem evento
     assert not [e for e, _p in broadcasts if e == "snr_levels"]
+
+
+# ── formato de data e hora por dispositivo ──────────────────────────────────
+
+def test_date_style_follows_the_device_cookie():
+    import i18n
+    from datetime import datetime
+    moment = datetime(2026, 10, 17, 14, 5, 9)
+    cases = {"pt-PT.dmy.24": "17/10/2026 14:05:09", "en-US.mdy.12": "10/17/2026 2:05:09 PM",
+             "en-GB.dmy.24": "17/10/2026 14:05:09", "sv-SE.ymd.24": "2026-10-17 14:05:09"}
+    for cookie, expected in cases.items():
+        with i18n.use_date_style(i18n.parse_date_style(cookie)):
+            assert i18n.fmt_datetime(moment, seconds=True) == expected
+    # Sem cookie, o habitual da língua; um cookie estragado é ignorado.
+    with i18n.use_language("pt"):
+        assert i18n.fmt_datetime(moment) == "17/10/2026 14:05"
+    with i18n.use_language("en"):
+        assert i18n.fmt_datetime(moment) == "10/17/2026 2:05 PM"
+    assert i18n.parse_date_style("en-US.mdy.12; x=1") is None
+    assert i18n.fmt_clock(datetime(2026, 1, 1, 0, 7)) in ("00:07", "12:07 AM")
+
+
+def test_metrics_use_the_device_date_format(server):
+    from server.app import DATE_COOKIE
+    import inspect
+    import i18n
+    login(server)
+    client = server["client"]
+    started = server["mesh"].metrics._start_time
+    pages = {}
+    for style in ("pt-PT.dmy.24", "en-US.mdy.12"):
+        if "server_name" in inspect.signature(client.set_cookie).parameters:
+            client.set_cookie("localhost", DATE_COOKIE, style)
+        else:
+            client.set_cookie(DATE_COOKIE, style)
+        pages[style] = client.get("/api/metrics/overview").get_data(as_text=True)
+        with i18n.use_date_style(i18n.parse_date_style(style)):
+            assert i18n.fmt_datetime(started, seconds=True) in pages[style]
+    assert pages["pt-PT.dmy.24"] != pages["en-US.mdy.12"]

@@ -1,9 +1,9 @@
 /*
  * web/js/tabs/navigation.js — Bússola, cartão do nó local, tabela de GPS.
  *
- * Espelha tabs/tab_navigation.py: rumo e distância do nó local ao nó
- * seleccionado, estado do GPS local com botão de refresh, e a lista de todos
- * os nós com posição conhecida ordenada por distância.
+ * Rumo e distância do nó local ao nó seleccionado, estado do GPS local com
+ * botão de refresh, e a lista de todos os nós com posição conhecida
+ * ordenada por distância.
  */
 'use strict';
 

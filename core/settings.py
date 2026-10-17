@@ -1,17 +1,13 @@
 """
-core/settings.py — Preferências persistentes sem Qt.
+core/settings.py — Preferências persistentes.
 
-Substitui QSettings("CT7BRA", "MeshDeck"). Guarda em JSON sob
-$XDG_CONFIG_HOME/meshdeck (por omissão ~/.config/meshdeck), o que torna o
-ficheiro legível e editável à mão — útil num servidor sem interface.
+Guarda em JSON sob $XDG_CONFIG_HOME/meshdeck (por omissão ~/.config/meshdeck),
+o que torna o ficheiro legível e editável à mão — útil num servidor sem
+interface. API: value / set_value / contains / remove.
 
-A API segue a do QSettings (value/set_value/contains/remove), que a versão
-desktop original usava; os aliases camelCase vêm dessa origem.
-
-Ao contrário do QSettings, o JSON preserva os tipos, por isso value() devolve
-int, bool e list tal como foram gravados. O parâmetro type= continua a ser
-aceite para coagir valores vindos de um ficheiro escrito à mão ou de uma
-migração do formato INI do Qt.
+O JSON preserva os tipos, por isso value() devolve int, bool e list tal como
+foram gravados. O parâmetro type= coage valores vindos de um ficheiro escrito
+à mão ou das preferências da versão 1.x (INI), migradas na primeira execução.
 """
 
 import json
@@ -79,7 +75,7 @@ class Settings:
 
     # -- leitura ----------------------------------------------------------
     def value(self, key: str, default=None, type=None):
-        """Lê uma chave. `type` coage o resultado (compatível com QSettings)."""
+        """Lê uma chave. `type` coage o resultado."""
         with self._lock:
             if key not in self._data:
                 return default
@@ -122,14 +118,6 @@ class Settings:
         with self._lock:
             self._data.clear()
             self._save()
-
-    def sync(self):
-        """Força a escrita em disco. Compatibilidade com QSettings.sync()."""
-        with self._lock:
-            self._save()
-
-    # -- alias Qt, para substituição directa no código PyQt5 --------------
-    setValue = set_value
 
     # -- interno ----------------------------------------------------------
     def _load(self):

@@ -1,5 +1,5 @@
 """
-core/config_writer.py — Leitura e escrita da configuração do nó, sem Qt.
+core/config_writer.py — Leitura e escrita da configuração do nó.
 
 Escreve a configuração do rádio a pedido do servidor web:
 
@@ -120,7 +120,7 @@ def _enum_name(desc, number: int, choices: Optional[list]) -> object:
 
 def coerce_value(obj, field_name: str, value) -> Tuple[object, Optional[str]]:
     """Converte o valor vindo do browser para o tipo do campo protobuf.
-    Devolve (valor, erro). Espelha ConfigTab._coerce_value do desktop."""
+    Devolve (valor, erro)."""
     if value is None:
         return None, None
     desc = _field_desc(obj, field_name)

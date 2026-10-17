@@ -1,18 +1,13 @@
 """
-core/signals.py — Sinais sem Qt.
+core/signals.py — Sinais (observer) do núcleo.
 
-Substitui pyqtSignal. A semântica replica a de uma ligação directa do Qt:
 emit() chama os slots sincronamente, na thread que emitiu, pela ordem em que
-foram ligados. Uma excepção num slot é registada e não impede os restantes,
-como acontece no Qt.
+foram ligados. Uma excepção num slot é registada e não impede os restantes.
 
-Para entrega noutra thread usa-se core.loop.CoreLoop.post() explicitamente —
-o equivalente a QMetaObject.invokeMethod(..., Qt.QueuedConnection).
+Para entrega noutra thread usa-se core.loop.CoreLoop.post() explicitamente.
 
-Nota: as ligações guardam referências fortes. Não há equivalente à
-desconexão automática do Qt quando o receptor é destruído, por isso quem
-liga é responsável por chamar disconnect() se o receptor tiver vida mais
-curta do que o emissor.
+Nota: as ligações guardam referências fortes. Quem liga é responsável por
+chamar disconnect() se o receptor tiver vida mais curta do que o emissor.
 """
 
 import logging
@@ -52,8 +47,8 @@ class Signal:
     def disconnect(self, slot=None):
         """Desliga um slot, ou todos se slot for None.
 
-        Desligar um slot que não está ligado não é erro (ao contrário do Qt),
-        para simplificar o teardown.
+        Desligar um slot que não está ligado não é erro, para simplificar o
+        teardown.
         """
         with self._lock:
             if slot is None:

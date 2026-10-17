@@ -1,5 +1,5 @@
-/* Paleta herdada de constants.py, para a interface web ser reconhecível
-   como o mesmo produto que a aplicação desktop. */
+/* Paleta escura do MeshDeck; as páginas das métricas (core/metrics_render.py)
+   usam as mesmas cores. */
 :root {
   --bg: #0d1117;
   --panel: #161b22;

@@ -3,7 +3,7 @@
  */
 'use strict';
 
-import { getLanguage, t } from './i18n.js';
+import { dateLocale, getLanguage, t } from './i18n.js';
 
 export function fmtTime(epochSeconds) {
   if (!epochSeconds) return '—';
@@ -11,8 +11,8 @@ export function fmtTime(epochSeconds) {
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   return sameDay
-    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    ? d.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString(dateLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 /* Tempo decorrido em linguagem corrente ("há 5 min"), para listas onde a

@@ -1,20 +1,15 @@
 """
 core/mesh_worker.py — Ligação ao nó Meshtastic, sem dependências de interface.
 
-Port de worker.py. A lógica (subscrição pubsub, processamento de pacotes,
-reconexão com backoff e watchdog, sincronização da NodeDB, envio de mensagens,
-traceroute e posição) é a mesma; só o acoplamento ao Qt foi substituído:
-
-    pyqtSignal                                 -> core.signals.Signal
-    QTimer                                     -> core.loop.Timer
-    QTimer.singleShot                          -> loop.single_shot
-    QMetaObject.invokeMethod(..., QueuedConn.) -> loop.post / @on_loop
+Subscrição pubsub, processamento de pacotes, reconexão com backoff e
+watchdog, sincronização da NodeDB, envio de mensagens, traceroute e posição.
+O resultado sai por core.signals.Signal; os temporizadores são do core.loop.
 
 Afinidade de thread: os handlers pubsub são invocados em threads internas da
 biblioteca meshtastic. Todos os sinais são entregues na thread do CoreLoop e
-todos os comandos públicos são encaminhados para lá — o equivalente ao
-Qt.AutoConnection que o código original usava. Nenhum callback corre em
-paralelo com outro, que é a garantia de que o estado interno depende.
+todos os comandos públicos são encaminhados para lá (loop.post / @on_loop).
+Nenhum callback corre em paralelo com outro, que é a garantia de que o
+estado interno depende.
 """
 import base64
 import functools
@@ -32,7 +27,7 @@ from meshtastic.protobuf import mesh_pb2, portnums_pb2, admin_pb2
 from constants import logger, _is_broadcast
 from core.loop import CoreLoop, default_loop, on_loop
 from core.signals import Signal
-from i18n import tr
+from i18n import lazy_tr, tr
 
 
 def _clean_text(value):
@@ -55,8 +50,6 @@ def _clean_text(value):
 
 class MeshtasticWorker:
     """Publica tudo o que acontece na rede Meshtastic através de Signals."""
-
-    NODE_POLL_INTERVAL_MS = 30_000   # 30s — safety-net; pubsub cobre updates em tempo real
 
     # Tópicos pubsub da biblioteca meshtastic e os handlers respectivos.
     # Lista única: start(), stop() e _do_reconnect() subscrevem e cancelam a
@@ -134,10 +127,10 @@ class MeshtasticWorker:
     def _emit(self, signal: Signal, *args):
         """Entrega um sinal na thread do loop.
 
-        Replica Qt.AutoConnection: emissão directa quando já estamos na
-        thread do loop, enfileirada quando vem de uma thread da biblioteca
-        meshtastic. Sem isto, os slots corriam na thread do leitor TCP e
-        tocariam no estado partilhado em paralelo.
+        Emissão directa quando já estamos na thread do loop, enfileirada
+        quando vem de uma thread da biblioteca meshtastic. Sem isto, os slots
+        corriam na thread do leitor TCP e tocariam no estado partilhado em
+        paralelo.
         """
         if self._loop.is_core_thread():
             signal.emit(*args)
@@ -183,7 +176,7 @@ class MeshtasticWorker:
             self.iface = iface
         except Exception as e:
             self._emit(self.error_occurred,
-                       tr("err_tcp_create", host=self.hostname, port=self.port, err=e))
+                       lazy_tr("err_tcp_create", host=self.hostname, port=self.port, err=e))
             logger.exception("Error starting worker")
 
     def stop(self):
@@ -271,7 +264,7 @@ class MeshtasticWorker:
             logger.warning(f"Reconnection thread failed: {e}")
             # Estamos numa thread de fundo: o watchdog e _reconnect_attempts
             # pertencem à thread do loop, por isso delegamos em vez de os tocar
-            # aqui — no original isto era uma corrida com o QTimer.
+            # aqui (tocá-los daqui seria uma corrida).
             self._loop.post(self._handle_connect_failure)
 
     def _handle_connect_failure(self):
@@ -296,7 +289,7 @@ class MeshtasticWorker:
     @on_loop
     def send_message(self, channel_index: int, text: str, reply_id: int = 0):
         if not self.iface or not self._connected:
-            self._emit(self.error_occurred, tr("err_send_msg"))
+            self._emit(self.error_occurred, lazy_tr("err_send_msg"))
             return
         try:
             result = self.iface.sendText(text, channelIndex=channel_index, wantAck=True,
@@ -306,12 +299,12 @@ class MeshtasticWorker:
             logger.debug(f"Channel {channel_index} message reply_id={reply_id:#010x}")
             self._emit(self.channel_message_sent, channel_index, text, pkt_id)
         except Exception as e:
-            self._emit(self.error_occurred, tr("err_send_msg_detail", err=e))
+            self._emit(self.error_occurred, lazy_tr("err_send_msg_detail", err=e))
 
     @on_loop
     def reset_nodedb(self):
         if not self.iface or not self._connected:
-            self._emit(self.error_occurred, tr("err_reset_nodedb_nc"))
+            self._emit(self.error_occurred, lazy_tr("err_reset_nodedb_nc"))
             return
         try:
             local_node = self.iface.localNode
@@ -326,12 +319,12 @@ class MeshtasticWorker:
             self._emit(self.nodedb_reset)
         except Exception as e:
             logger.error(f"Error resetting NodeDB: {e}", exc_info=True)
-            self._emit(self.error_occurred, tr("err_reset_nodedb", err=e))
+            self._emit(self.error_occurred, lazy_tr("err_reset_nodedb", err=e))
 
     @on_loop
     def send_traceroute(self, dest_id: str, hop_limit: int = 3):
         if not self.iface or not self._connected:
-            self._emit(self.error_occurred, tr("err_traceroute_nc"))
+            self._emit(self.error_occurred, lazy_tr("err_traceroute_nc"))
             return
         try:
             r = mesh_pb2.RouteDiscovery()
@@ -346,7 +339,7 @@ class MeshtasticWorker:
             logger.info(f"Traceroute sent to {dest_id} (hopLimit={hop_limit})")
         except Exception as e:
             logger.error(f"Error sending traceroute: {e}", exc_info=True)
-            self._emit(self.error_occurred, tr("err_traceroute", err=e))
+            self._emit(self.error_occurred, lazy_tr("err_traceroute", err=e))
 
     @on_loop
     def send_position(self):
@@ -359,9 +352,8 @@ class MeshtasticWorker:
           2. Fallback manual: lê latitudeI/longitudeI do nodesByNum e constrói
              o pacote POSITION_APP à mão.
 
-        Em ambos os casos emite position_sent(True/False, mensagem) para que
-        _on_send_position possa actualizar a statusBar *apenas* após saber
-        o resultado real.
+        Em ambos os casos emite position_sent(True/False, mensagem) só depois
+        de saber o resultado real; o browser mostra o erro, se houver.
         """
         if not self.iface or not self._connected:
             self._emit(self.position_sent, False, tr("Não conectado."))
@@ -375,13 +367,11 @@ class MeshtasticWorker:
             # localNode.setPosition() envia directamente sem precisar de
             # ler coordenadas da cache TCP — funciona mesmo que nodesByNum
             # ainda não tenha recebido a posição do firmware.
-            sent_via_api = False
             try:
                 local_node.setPosition(
                     lat=None, lon=None, alt=None,
                     # Sem argumentos → firmware usa a posição interna (GPS ou fixa)
                 )
-                sent_via_api = True
                 logger.info("send_position: sent via localNode.setPosition()")
                 self._emit(self.position_sent, True, tr("📍 Posição enviada para a rede (via firmware)."))
                 return
@@ -520,7 +510,7 @@ class MeshtasticWorker:
         try:
             local_node = self.iface.localNode
             if not local_node:
-                self._emit(self.error_occurred, tr("err_nodeinfo_nc"))
+                self._emit(self.error_occurred, lazy_tr("err_nodeinfo_nc"))
                 return
             local_num  = local_node.nodeNum
             me         = (self.iface.nodesByNum.get(local_num, {})
@@ -571,15 +561,15 @@ class MeshtasticWorker:
                 wantResponse=False,
                 channelIndex=0
             )
-            logger.info(f"send_node_info: broadcasted User packet manually (no reboot)")
+            logger.info("send_node_info: broadcasted User packet manually (no reboot)")
         except Exception as e:
             logger.error(f"Error sending manual NODEINFO: {e}", exc_info=True)
-            self._emit(self.error_occurred, tr("err_nodeinfo", err=e))
+            self._emit(self.error_occurred, lazy_tr("err_nodeinfo", err=e))
 
     @on_loop
     def send_direct_message(self, dest_id: str, text: str, reply_id: int = 0):
         if not self.iface or not self._connected:
-            self._emit(self.error_occurred, tr("err_dm_nc"))
+            self._emit(self.error_occurred, lazy_tr("err_dm_nc"))
             return
         try:
 
@@ -618,7 +608,7 @@ class MeshtasticWorker:
                     err_str = str(pki_err)
                     if 'PKI_UNKNOWN_PUBKEY' in err_str or 'unknown' in err_str.lower():
                         logger.warning(f"DM PKI failed for {dest_id}: {pki_err}")
-                        self._emit(self.error_occurred, tr("err_dm_pki", dest=dest_id))
+                        self._emit(self.error_occurred, lazy_tr("err_dm_pki", dest=dest_id))
                         return
                     raise
 
@@ -634,7 +624,7 @@ class MeshtasticWorker:
 
         except Exception as e:
             logger.error(f"Error sending DM to {dest_id}: {e}", exc_info=True)
-            self._emit(self.error_occurred, tr("err_dm", err=e))
+            self._emit(self.error_occurred, lazy_tr("err_dm", err=e))
 
     def _on_text_message(self, packet, interface=None):
         try:

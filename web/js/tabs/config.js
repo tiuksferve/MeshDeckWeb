@@ -1,8 +1,8 @@
 /*
  * web/js/tabs/config.js — Aba de configuração: ler e gravar a do nó.
  *
- * O esquema das secções vem de /api/config/defs (core/config_defs.py, o
- * mesmo do desktop) e os valores actuais de /api/config/values. Cada campo
+ * O esquema das secções vem de /api/config/defs (core/config_defs.py) e os
+ * valores actuais de /api/config/values. Cada campo
  * vira o controlo do seu tipo; o que o utilizador muda fica guardado como
  * alteração pendente (destacada, com contagem por secção) até carregar em
  * "Gravar no nó". A gravação é uma só transacção no servidor
@@ -16,7 +16,7 @@
 
 import { getJSON, postJSON } from '../api.js';
 import { escapeHtml, isMobile, showDialog } from '../utils.js';
-import { t } from '../i18n.js';
+import { getLanguage, t } from '../i18n.js';
 import { store } from '../store.js';
 
 const CHANNELS = '__channels__';
@@ -32,7 +32,7 @@ let ownerEdits = {};
 let channelsDraft = null;      // cópia editável dos canais
 let activeKey = null;
 let loading = false;
-let serverLanguage = null;
+let defsLanguage = null;      // língua em que o esquema foi carregado
 
 export function mount() {
   const list = document.getElementById('config-list');
@@ -47,9 +47,10 @@ export function mount() {
   body.addEventListener('click', onBodyClick);
 
   // Os rótulos vêm traduzidos do servidor: noutro idioma relê-se o esquema.
-  store.on('snapshot', (snapshot) => {
-    if (!snapshot.language || snapshot.language === serverLanguage) return;
-    serverLanguage = snapshot.language;
+  defsLanguage = getLanguage();
+  store.on('language-changed', () => {
+    if (getLanguage() === defsLanguage) return;
+    defsLanguage = getLanguage();
     sections = [];
     if (isVisible()) load();
   });

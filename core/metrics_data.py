@@ -16,7 +16,7 @@ import logging
 import math
 import time
 from datetime import datetime
-from i18n import tr
+from i18n import fmt_clock, tr
 
 logger = logging.getLogger("MeshDeck.metrics")
 
@@ -223,12 +223,6 @@ class MetricsDataMixin:
             return 0.0
         return e['val']
 
-    def _air_val(self, nid: str) -> float:
-        e = self._air_tx.get(nid)
-        if e is None or time.time() - e['ts'] > _CH_TTL_S:
-            return 0.0
-        return e['val']
-
     def _ch_util_active(self) -> dict:
         now = time.time()
         return {nid: e['val'] for nid, e in self._ch_util.items()
@@ -261,7 +255,7 @@ class MetricsDataMixin:
         Sem pacote (lote inicial da NodeDB, leitura do nó local): só os campos
         do nó, identificado por `nid` — sem ele não há a quem os atribuir.
         Com pacote: só para quem não liga raw_packet_received; quem liga
-        (desktop e servidor) não deve passar o pacote aqui, ou conta-o duas vezes.
+        (como o servidor) não deve passar o pacote aqui, ou conta-o duas vezes.
         """
         if not packet:
             self._update_from_node_data(nid, node_data)
@@ -688,7 +682,7 @@ class MetricsDataMixin:
             "heap_free": s["heapFreeBytes"], "heap_total": s["heapTotalBytes"],
             "uptime": s["uptimeSeconds"],
             "delta": delta,
-            "stats_at": datetime.fromtimestamp(self._local_stats_ts).strftime('%H:%M:%S'),
+            "stats_at": fmt_clock(self._local_stats_ts, seconds=True),
             "noise_ts_labels": [self._ts_label(t) for t, _ in self._noise_ts],
             "noise_ts_vals": [v for _, v in self._noise_ts],
             **self._data_host(),
@@ -705,7 +699,7 @@ class MetricsDataMixin:
             "host_disk_gb": [gb(h.get(k)) for k in ("diskfree1Bytes", "diskfree2Bytes", "diskfree3Bytes")],
             "host_uptime": h.get("uptimeSeconds"),
             "host_user": h.get("userString", ""),
-            "host_at": datetime.fromtimestamp(self._host_ts).strftime('%H:%M:%S'),
+            "host_at": fmt_clock(self._host_ts, seconds=True),
         }
 
     def ingest_node_position(self, nid: str, lat: float, lon: float):
@@ -786,10 +780,10 @@ class MetricsDataMixin:
 
     # ── helpers ──────────────────────────────────────────────────────────
     def _ts_label(self, ts: float) -> str:
-        return datetime.fromtimestamp(ts).strftime('%H:%M')
+        return fmt_clock(ts)
 
     def _now_str(self) -> str:
-        return datetime.now().strftime('%H:%M:%S')
+        return fmt_clock(datetime.now(), seconds=True)
 
     def _name(self, nid: str) -> str:
         return self._node_short.get(nid, nid) if nid else nid
@@ -1015,7 +1009,7 @@ class MetricsDataMixin:
         for i in range(29, -1, -1):
             t0 = now-(i+1)*60; t1 = now-i*60
             cnt = len([p for p in self._packets if t0 <= p[0] < t1])
-            bins.append((datetime.fromtimestamp(t1).strftime("%H:%M"), cnt))
+            bins.append((fmt_clock(t1), cnt))
         return {"labels":labels, "values":values,
                 "n_direct":n_direct, "n_1hop":n_1hop, "n_multi":n_multi, "n_unknown":n_unknown,
                 "n_rf":n_rf, "n_mqtt":n_mqtt,

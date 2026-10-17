@@ -1,9 +1,9 @@
 /*
  * web/js/tabs/nodes.js — Aba de lista de nós.
  *
- * Espelha NodeTableModel/tabs/tab_nodes.py do desktop: nó local fixo no topo,
- * favoritos logo a seguir, pesquisa por ID/nome, acções rápidas por linha
- * (favorito, DM, centrar no mapa, traceroute) e detalhe do último pacote.
+ * Todos os nós menos o local (que está no cabeçalho), favoritos no topo,
+ * pesquisa por ID/nome, acções rápidas por linha (favorito, DM, centrar no
+ * mapa, traceroute) e detalhe do último pacote.
  */
 'use strict';
 

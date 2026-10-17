@@ -29,7 +29,7 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.settings import settings
-from i18n import set_language
+from i18n import set_language, tr
 from server.app import create_app
 from server import tls
 from server.auth import ServerConfig, announce_first_run
@@ -67,17 +67,17 @@ def parse_args():
 
 
 def set_password_interactively(config: ServerConfig) -> int:
-    first = getpass.getpass("Nova password: ")
-    second = getpass.getpass("Repita: ")
+    first = getpass.getpass(tr("Nova password: "))
+    second = getpass.getpass(tr("Repita: "))
     if first != second:
-        print("As passwords não coincidem.", file=sys.stderr)
+        print(tr("As passwords não coincidem."), file=sys.stderr)
         return 1
     try:
         config.set_password(first)
     except ValueError as e:
-        print(f"Password recusada: {e}", file=sys.stderr)
+        print(tr("Password recusada: {err}", err=e), file=sys.stderr)
         return 1
-    print("Password alterada.")
+    print(tr("Password alterada."))
     return 0
 
 
@@ -87,29 +87,19 @@ def make_certificate(config: ServerConfig, names: list) -> int:
     address = "%s:%d" % (result["names"][0], config.https_port)
     if config.generated_password:
         # Instalação nova: a password gerada só existe agora, em memória.
-        print(f"\nPassword gerada (guarde-a, não volta a aparecer):  {config.generated_password}")
+        print("\n" + tr("Password gerada (guarde-a, não volta a aparecer):")
+              + f"  {config.generated_password}")
+    ca_line = tr("CA local criada:") if result["ca_created"] else tr("CA local reutilizada:")
     print("\n".join([
         "",
-        "HTTPS activado. Certificado do servidor válido até " + result["expires"] + " para:",
+        tr("HTTPS activado. Certificado do servidor válido até {date} para:", date=result["expires"]),
         "  " + ", ".join(result["names"]),
         "",
-        ("CA local criada:  " if result["ca_created"] else "CA local reutilizada:  ") + result["ca"],
+        f"{ca_line}  {result['ca']}",
         "",
-        "Reinicie o servidor. O HTTP continua como antes, sem nada a instalar;",
-        "o HTTPS fica em  https://%s/  para os dispositivos que querem" % address,
-        "a bússola. Para não ver o aviso de segurança, instale a CA nesses",
-        "dispositivos (só uma vez; mantém-se válida se voltar a gerar o certificado):",
+        tr("cert_done_steps", address=address),
         "",
-        "  iPhone/iPad:  abra no Safari  https://%s/ca.crt  (aceite o aviso)," % address,
-        "                Definições → Perfil descarregado → Instalar; depois",
-        "                Definições → Geral → Informações → Definições de confiança",
-        "                de certificados → activar \"MeshDeckWeb CA\".",
-        "  Android:      descarregue /ca.crt e instale em Definições → Segurança →",
-        "                Encriptação e credenciais → Instalar certificado → CA.",
-        "  PC:           importe meshdeck-ca.crt como Autoridade de certificação",
-        "                de raiz fidedigna (ou aceite o aviso do browser).",
-        "",
-        "Para ficar só em HTTP:  python3 run_server.py --no-tls",
+        tr("Para ficar só em HTTP:") + "  python3 run_server.py --no-tls",
         "",
     ]))
     return 0
@@ -133,6 +123,13 @@ def start_https_server(app, host: str, config: ServerConfig):
     return server
 
 
+def quiet_library_logs():
+    """O Werkzeug e o engineio registam cada pedido (em polling isso enche o
+    log); a biblioteca meshtastic, o pubsub e o urllib3 detalham cada pacote."""
+    for name in ("werkzeug", "engineio", "socketio", "meshtastic", "pubsub", "urllib3"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def main():
     args = parse_args()
     logging.basicConfig(
@@ -140,10 +137,9 @@ def main():
         format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    # O Werkzeug e o engineio registam cada pedido; em polling isso enche o log.
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)
-    logging.getLogger("engineio").setLevel(logging.WARNING)
-    logging.getLogger("socketio").setLevel(logging.WARNING)
+    quiet_library_logs()
+    # Língua do terminal: a escolhida no instalador.
+    set_language(settings().value("language", "en"))
 
     config = ServerConfig()
 
@@ -155,21 +151,19 @@ def main():
         return make_certificate(config, args.make_cert)
     if args.no_tls:
         config.clear_tls()
-        print("HTTPS desactivado: no próximo arranque o servidor fica só em HTTP.")
+        print(tr("HTTPS desactivado: no próximo arranque o servidor fica só em HTTP."))
         return 0
     if args.tls_cert or args.tls_key:
         if not (args.tls_cert and args.tls_key):
-            print("--tls-cert e --tls-key têm de ser indicados juntos.", file=sys.stderr)
+            print(tr("--tls-cert e --tls-key têm de ser indicados juntos."), file=sys.stderr)
             return 1
         for path in (args.tls_cert, args.tls_key):
             if not os.path.isfile(path):
-                print(f"Ficheiro não encontrado: {path}", file=sys.stderr)
+                print(tr("Ficheiro não encontrado: {path}", path=path), file=sys.stderr)
                 return 1
         config.set_tls(args.tls_cert, args.tls_key)
     if args.set_password:
         return set_password_interactively(config)
-
-    set_language(settings().value("language", "en"))
 
     host = args.host or config.bind_host
     port = args.port or config.bind_port
@@ -191,10 +185,10 @@ def main():
         result = mesh.connect(mode=mode, host=node_host, port=node_port,
                               serial_port=serial_port)
         if not result["ok"]:
-            print(f"Ligação ao nó falhou: {result['error']}", file=sys.stderr)
+            print(tr("Ligação ao nó falhou: {err}", err=result["error"]), file=sys.stderr)
 
     def shutdown(_signum, _frame):
-        print("\na encerrar…", flush=True)
+        print("\n" + tr("a encerrar…"), flush=True)
         mesh.shutdown()
         os._exit(0)
 

@@ -116,19 +116,60 @@ def test_phone_header_shows_local_short_name_on_the_connection_line(page):
 
 
 def test_language_switch_translates_the_interface(page):
+    import i18n
     page.click("#menu-btn")
     page.click("#lang-seg [data-lang=pt]")
     try:
         page.wait_for("document.documentElement.lang === 'pt'", message="o idioma não mudou para PT")
         assert "Mapa" in page.text("[data-tab=map]")
         assert "Mensagens" in page.text("[data-tab=messages]")
-        # As secções das métricas vêm do servidor, também traduzidas.
+        # As secções das métricas e o HTML de cada uma vêm do servidor, também traduzidos.
         page.click("[data-tab=metrics]")
         page.wait_for("document.querySelector('#metrics-list li[data-key=overview]')?.innerText.includes('Visão Geral')")
+        page.wait_for("document.getElementById('metrics-frame').contentDocument?.body?.innerText.includes('Pacotes')",
+                      message="o HTML das métricas não veio em PT")
+        # A escolha é deste dispositivo: fica no cookie e não muda o servidor.
+        assert "meshdeck_lang=pt" in page.js("document.cookie")
+        assert i18n.get_language() == "en"
     finally:
         page.js("document.querySelector('#lang-seg [data-lang=en]').click()")
         page.wait_for("document.documentElement.lang === 'en'", message="o idioma não voltou a EN")
     assert "Map" in page.text("[data-tab=map]")
+
+
+def test_language_defaults_to_the_device_and_the_choice_is_remembered(page):
+    detect = ("import('/js/i18n.js').then(({preferredLanguage}) => preferredLanguage())")
+    page.js("document.cookie = 'meshdeck_lang=; path=/; max-age=0'")
+    try:
+        page.js("Object.defineProperty(navigator, 'languages', {value: ['pt-PT', 'en'], configurable: true})")
+        assert page.js(detect) == "pt", "sem escolha, segue a língua do dispositivo"
+        page.js("Object.defineProperty(navigator, 'languages', {value: ['de-DE'], configurable: true})")
+        assert page.js(detect) == "en"
+        page.js("import('/js/i18n.js').then(({rememberLanguage}) => rememberLanguage('pt'))")
+        assert page.js(detect) == "pt", "a escolha no menu ganha à língua do dispositivo"
+    finally:
+        page.js("document.cookie = 'meshdeck_lang=en; path=/'")
+
+
+def test_dates_follow_the_language_and_the_device_region(page):
+    cookie = "document.cookie.split('; ').find((c) => c.startsWith('meshdeck_dates='))"
+    locale = "import('/js/i18n.js').then(({dateLocale}) => dateLocale())"
+    assert page.js(cookie) == "meshdeck_dates=en-US.mdy.12"
+    page.js("Object.defineProperty(navigator, 'languages', {value: ['en-GB'], configurable: true})")
+    assert page.js(locale) == "en-GB", "dispositivo em inglês: segue a região dele"
+    page.js("Object.defineProperty(navigator, 'languages', {value: ['en-US'], configurable: true})")
+    page.click("#menu-btn")
+    page.click("#lang-seg [data-lang=pt]")
+    try:
+        page.wait_for("document.documentElement.lang === 'pt'")
+        assert page.js(locale) == "pt-PT", "dispositivo noutra língua: o habitual da escolhida"
+        assert page.js(cookie) == "meshdeck_dates=pt-PT.dmy.24"
+        when = "import('/js/utils.js').then(({fmtTime}) => fmtTime(Date.UTC(2020, 0, 2, 15, 4) / 1000))"
+        assert "PM" not in page.js(when)
+    finally:
+        page.js("document.querySelector('#lang-seg [data-lang=en]').click()")
+        page.wait_for("document.documentElement.lang === 'en'")
+    assert page.js(cookie) == "meshdeck_dates=en-US.mdy.12"
 
 
 def test_snr_colours_follow_the_preset_sent_by_the_server(page):

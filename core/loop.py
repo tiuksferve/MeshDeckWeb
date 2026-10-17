@@ -1,21 +1,19 @@
 """
-core/loop.py — Event loop sem Qt.
+core/loop.py — Event loop de uma só thread para o núcleo.
 
-Substitui o modelo QTimer + QMetaObject.invokeMethod(Qt.QueuedConnection) de
-que o MeshtasticWorker depende. A biblioteca meshtastic entrega callbacks
-pubsub em threads próprias; o worker encaminha-os para uma única thread para
-não haver acesso concorrente ao estado interno. Esse desenho resolveu bugs
-reais de concorrência, por isso a semântica é preservada em vez de reinventada.
+A biblioteca meshtastic entrega callbacks pubsub em threads próprias; o
+MeshtasticWorker encaminha-os para uma única thread para não haver acesso
+concorrente ao estado interno. Esse desenho resolveu bugs reais de
+concorrência.
 
-Equivalências:
-    QTimer.singleShot(ms, fn)                      -> loop.single_shot(ms, fn)
-    QTimer(interval=ms) + timeout.connect(fn)      -> loop.every(ms, fn)
-    QMetaObject.invokeMethod(o, "s", QueuedConn.)  -> loop.post(fn)
+    loop.single_shot(ms, fn)   corre fn uma vez, daqui a ms
+    loop.every(ms, fn)         corre fn periodicamente
+    loop.post(fn)              corre fn na thread do loop, logo que possível
 
 Garantias:
   * Todos os callbacks correm na thread do loop, nunca em paralelo entre si.
   * post() a partir da própria thread do loop também enfileira, não corre
-    inline — tal como uma QueuedConnection.
+    inline.
   * Uma excepção num callback é registada e o loop continua.
   * Um timer periódico é reagendado só depois de o callback retornar, para
     um callback lento não acumular disparos em atraso.
@@ -34,9 +32,8 @@ logger = logging.getLogger("MeshDeck.loop")
 def on_loop(method):
     """Garante que o método corre na thread do CoreLoop do objecto.
 
-    Equivalente a invocar um slot com Qt.AutoConnection: chamada da própria
-    thread do loop corre inline; chamada de outra thread é enfileirada e
-    retorna None imediatamente. O objecto tem de expor o loop em `self._loop`.
+    Chamada da própria thread do loop corre inline; chamada de outra thread
+    é enfileirada e retorna None imediatamente. O objecto tem de expor o loop em `self._loop`.
 
     Só se aplica a métodos sem valor de retorno útil — um comando
     enfileirado não tem resultado para devolver.
@@ -54,7 +51,7 @@ def on_loop(method):
 
 
 class Timer:
-    """Handle de um temporizador. Equivalente funcional de QTimer."""
+    """Handle de um temporizador (único ou periódico)."""
 
     __slots__ = ("_loop", "_interval", "_fn", "_args", "_repeat", "_active", "_seq", "name")
 
@@ -68,7 +65,7 @@ class Timer:
         self._seq = -1          # identifica a entrada válida no heap
         self.name = name or getattr(fn, "__name__", "timer")
 
-    # -- API ao estilo QTimer ---------------------------------------------
+    # -- controlo ---------------------------------------------------------
     @property
     def interval_ms(self) -> float:
         return self._interval * 1000.0
@@ -161,7 +158,6 @@ class CoreLoop:
     def post(self, fn, *args):
         """Enfileira fn(*args) para correr na thread do loop.
 
-        Equivalente a QMetaObject.invokeMethod(..., Qt.QueuedConnection).
         Chamável de qualquer thread, inclusive da própria thread do loop, caso
         em que o callback corre no ciclo seguinte e não inline.
         """
@@ -171,17 +167,14 @@ class CoreLoop:
             self._queue.append((fn, args))
             self._cv.notify()
 
-    # Alias com o nome usado no asyncio, para quem preferir.
-    call_soon = post
-
     def single_shot(self, delay_ms: float, fn, *args) -> Timer:
-        """Equivalente a QTimer.singleShot. Devolve o Timer para poder cancelar."""
+        """Corre fn(*args) uma vez, daqui a delay_ms. Devolve o Timer para poder cancelar."""
         t = Timer(self, delay_ms, fn, args, repeat=False)
         t.start()
         return t
 
     def every(self, interval_ms: float, fn, *args) -> Timer:
-        """Timer periódico já arrancado. Equivalente a um QTimer com intervalo."""
+        """Timer periódico já arrancado."""
         t = Timer(self, interval_ms, fn, args, repeat=True)
         t.start()
         return t
@@ -272,8 +265,8 @@ class CoreLoop:
             logger.exception("CoreLoop: callback %r levantou excepção", fn)
 
 
-# Loop partilhado do processo. O servidor e o adaptador Qt usam este, em vez de
-# criarem instâncias próprias, para que haja uma só thread a tocar no estado.
+# Loop partilhado do processo. O servidor usa este, em vez de criar
+# instâncias próprias, para que haja uma só thread a tocar no estado.
 _default_loop: CoreLoop = None
 _default_lock = threading.Lock()
 

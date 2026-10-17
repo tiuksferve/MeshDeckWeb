@@ -1,16 +1,16 @@
 /*
  * web/js/tabs/messages.js — Aba de mensagens (canais + DMs).
  *
- * Espelha tabs/tab_messages.py: lista de canais com não-lidas, DMs ordenadas
- * por actividade recente, indicador PKI/PSK, estado de ACK/NAK por mensagem
- * enviada, separadores de data.
+ * Lista de canais com não-lidas, DMs ordenadas por actividade recente,
+ * indicador PKI/PSK, estado de ACK/NAK por mensagem enviada, separadores de
+ * data.
  */
 'use strict';
 
 import { store } from '../store.js';
 import { commands } from '../socket.js';
 import { escapeHtml, fmtTime, isMobile } from '../utils.js';
-import { t } from '../i18n.js';
+import { dateLocale, t } from '../i18n.js';
 
 let activeKey = null;
 let visible = false;
@@ -239,7 +239,7 @@ function dateLabel(epochSeconds) {
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return t('Hoje');
   if (d.toDateString() === yesterday.toDateString()) return t('Ontem');
-  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function renderConversation() {

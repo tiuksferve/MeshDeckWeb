@@ -1,27 +1,26 @@
 /*
  * web/js/tabs/map.js — Aba do mapa (Leaflet).
  *
- * Espelha MapWidget em tabs/tab_nodes.py: marcadores coloridos por estado
- * (seleccionado, activo agora, inactivo, via MQTT, via RF), traceroutes a
- * verde com SNR por segmento, vizinhança NeighborInfo a roxo tracejado, e
- * quatro temas de mapa. As URLs dos tiles exigem internet — tal como na
- * app desktop, só os assets da aplicação (Leaflet, ícones) estão vendorizados.
+ * Marcadores coloridos por estado (seleccionado, activo agora, inactivo, via
+ * MQTT, via RF), traceroutes a verde com SNR por segmento, vizinhança
+ * NeighborInfo a roxo tracejado, e os temas Escuro, Claro e Satélite. Escuro
+ * e Claro passam pela cache do servidor (funcionam offline nas zonas já
+ * vistas); o Satélite vai directamente à Esri e precisa de internet.
  */
 'use strict';
 
 import { store } from '../store.js';
 import { requestTraceroute } from '../traceroute.js';
-import { t } from '../i18n.js';
+import { dateLocale, t } from '../i18n.js';
 import { escapeHtml, fmtNum, fmtAgo, isMobile, showDialog } from '../utils.js';
 
-// As camadas CartoDB (dark_all/light_all) que a app desktop usava passaram a
+// As camadas CartoDB (dark_all/light_all) que o MeshDeck 1.x usava passaram a
 // exigir uma chave de API (devolvem 200 OK com uma imagem "API KEY REQUIRED"
 // em vez de erro HTTP, por isso o mapa parecia só não aparecer). Reaproveita-se
 // o OpenStreetMap, livre, para os dois: "Claro" é OSM tal e qual, "Escuro"
 // é o mesmo OSM com um filtro CSS a inverter as cores — uma técnica comum
-// para mapas escuros sem depender de um provedor pago. Fica um tema a menos
-// do que a app desktop (o antigo "🗺 OpenStreetMap" tornou-se idêntico a
-// "☀ Claro"), por isso essa opção foi retirada da barra de temas.
+// para mapas escuros sem depender de um provedor pago. (O antigo tema
+// "🗺 OpenStreetMap" ficaria idêntico a "☀ Claro", por isso foi retirado.)
 // Claro e Escuro vêm do servidor (server/tile_cache.py), que guarda cada
 // mosaico visto: sem internet, as zonas já vistas continuam a aparecer.
 const TILE_URLS = {
@@ -174,7 +173,7 @@ function setTheme(name) {
 
 /* ── marcadores ───────────────────────────────────────────────────────── */
 
-// Cores dos marcadores, com a mesma legenda do mapa da app desktop.
+// Cores dos marcadores; a legenda do pop-up usa as mesmas.
 const MARKER_STATES = {
   selected: { color: '#00cc66', fill: '#00ff88', radius: 9, label: 'Seleccionado' },
   active:   { color: '#cc0000', fill: '#ff4444', radius: 7, label: 'Pacote recebido' },
@@ -209,7 +208,7 @@ function popupHtml(node) {
   const via = node.via_mqtt === true ? '☁ MQTT' : 'RF';
   const name = node.long_name || node.id_string;
   const lh = node.last_heard
-    ? new Date(node.last_heard * 1000).toLocaleString([], {
+    ? new Date(node.last_heard * 1000).toLocaleString(dateLocale(), {
         hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit',
       })
     : '—';
@@ -440,8 +439,7 @@ function edgeLatLng(nodeId) {
   return null;
 }
 
-/* Segmentos desenháveis de um traceroute, como _get_active_edges do
-   desktop: em cada sentido a rota é uma cadeia de nós; os que não têm GPS
+/* Segmentos desenháveis de um traceroute: em cada sentido a rota é uma cadeia de nós; os que não têm GPS
    (muitas vezes os relays) são saltados e liga-se directamente o nó com
    posição seguinte. Sem isto, uma rota com um relay sem GPS não desenhava
    nada. skipped lista os hops saltados, para o tooltip. */

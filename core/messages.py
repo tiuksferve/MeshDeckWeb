@@ -1,9 +1,8 @@
 """
 core/messages.py — Conversas e estado de entrega, sem interface.
 
-No desktop as mensagens viviam no widget e desapareciam ao fechar a janela.
-No servidor têm de viver fora da interface: há vários browsers a ver a mesma
-conversa e um reload não pode apagar o histórico. Daí este armazenamento.
+As mensagens vivem no servidor, fora da interface: há vários browsers a ver
+a mesma conversa e um reload não pode apagar o histórico.
 
 A regra de encaminhamento é a mesma da aba de mensagens: uma mensagem é
 directa se vier cifrada com PKI, se o destino for o nó local, ou se o destino

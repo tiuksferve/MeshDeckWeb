@@ -113,7 +113,9 @@ Charts update live, without reloading the page.
 - Protection against password guessing: after 5 failed attempts the address
   is locked out for a while (1 minute, doubling up to 15)
 - Several devices at once, all in sync in real time
-- English and Português, chosen in the ☰ menu
+- English and Português, **per device**: each browser follows its own
+  language and can switch in the ☰ menu without changing the others; dates
+  and times follow the chosen language (and the device's region)
 
 ---
 
@@ -305,7 +307,7 @@ Settings live in `~/.config/meshdeck/` (or `$XDG_CONFIG_HOME/meshdeck/`):
 | File | Contents |
 |------|----------|
 | `server.json` | Session key, password hash, bind address, HTTPS settings |
-| `settings.json` | Language and other preferences |
+| `settings.json` | Server language (terminal, logs) and other preferences |
 | `tls/` | Local CA and server certificate (the private keys are readable only by you) |
 
 The offline map tiles live in `~/.cache/meshdeck/tiles/` (or

@@ -94,10 +94,6 @@ def test_write_is_atomic_no_tmp_left_behind(st, tmp_path):
     assert leftovers == []
 
 
-def test_qt_setvalue_alias(st):
-    st.setValue("language", "pt")
-    assert st.value("language") == "pt"
-
 
 def test_concurrent_writes_do_not_corrupt_file(st, tmp_path):
     def writer(n):

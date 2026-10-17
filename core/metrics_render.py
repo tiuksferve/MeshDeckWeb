@@ -2,20 +2,13 @@
 core/metrics_render.py — MetricsRenderMixin: geração de HTML/JS para cada
 secção de métricas (Chart.js, tabelas, KPIs).
 
-Separado de tab_metrics.py para facilitar manutenção.
-Combinado com MetricsDataMixin em core/metrics.py (MeshMetrics).
+Os dados vêm de MetricsDataMixin; os dois juntam-se em core/metrics.py
+(MeshMetrics).
 """
 import json
-from i18n import tr
-import math
 import time
-from datetime import datetime
 
-from constants import (
-    logger,
-    DARK_BG, PANEL_BG, BORDER_COLOR, ACCENT_GREEN, ACCENT_BLUE,
-    ACCENT_ORANGE, ACCENT_RED, TEXT_PRIMARY, TEXT_MUTED
-)
+from i18n import date_locale, fmt_clock, fmt_datetime, tr
 
 
 class MetricsRenderMixin:
@@ -71,9 +64,8 @@ class MetricsRenderMixin:
   .tag-gray {{ background: #21262d; color: #8b949e; }}
   .no-data {{ color: #8b949e; text-align: center; padding: 40px 0; font-size: 13px; }}
   .updated {{ color: #8b949e; font-size: 10px; text-align: right; margin-top: 12px; }}
-  /* Ecrã estreito (interface web no telemóvel). O desktop nunca chega a esta
-     largura, por isso não é afectado. KPIs em duas colunas, gráficos e
-     tabelas a toda a largura, e os valores grandes mais contidos. */
+  /* Ecrã estreito (telemóvel). KPIs em duas colunas, gráficos e tabelas a
+     toda a largura, e os valores grandes mais contidos. */
   @media (max-width: 600px) {{
     body {{ padding: 10px; }}
     h2 {{ font-size: 15px; }}
@@ -174,7 +166,7 @@ class MetricsRenderMixin:
   <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
   <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Pacotes")}</th><th>Ch. Util.</th><th>{tr("Bateria")}</th></tr><tbody id="ov-node-tbody" data-filterable="1">{rows}</tbody></table>
 </div>
-<div class="updated" id="ov-updated">{tr('Sessão iniciada')} · {datetime.fromtimestamp(self._start_time).strftime('%H:%M:%S %d/%m/%Y')}</div>
+<div class="updated" id="ov-updated">{tr('Sessão iniciada')} · {fmt_datetime(self._start_time, seconds=True)}</div>
 <script>
 window._metricsUpdateData = function(d) {{
   function kpiColor(val, thresholds) {{
@@ -694,7 +686,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
             t0 = now - (i + 1) * 60
             t1 = now - i * 60
             cnt = len([p for p in self._packets if t0 <= p[0] < t1])
-            bins_60.append((datetime.fromtimestamp(t1).strftime('%H:%M'), cnt))
+            bins_60.append((fmt_clock(t1), cnt))
         ppm_labels = [b[0] for b in bins_60]
         ppm_vals   = [b[1] for b in bins_60]
 
@@ -1097,7 +1089,7 @@ window._metricsFilterTable = function(text) {{
 {chart_card}
 <script>
 var _palette=['#f0883e','#58a6ff','#39d353','#bc8cff','#f85149','#e3b341'];
-function _hm(v){{ var t=new Date(v); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); }}
+function _hm(v){{ return new Date(v).toLocaleTimeString({json.dumps(date_locale())}, {{hour:'2-digit', minute:'2-digit'}}); }}
 function _datasets(series){{ return series.map(function(s,i){{ return {{ label:s.name, data:s.points,
   borderColor:_palette[i%6], backgroundColor:_palette[i%6], tension:0.3, pointRadius:2, fill:false }}; }}); }}
 if(document.getElementById('tempChart')) {{
@@ -1239,7 +1231,6 @@ window._metricsUpdateData = function(d) {{
         net_nak_rate    = d['net_nak_rate']
         p_col           = d['p_col']
         total_pkt       = d['total_pkt']
-        active_senders  = d['active_senders']
         sent            = d['sent']
         acked           = d['acked']
         naked           = d['naked']

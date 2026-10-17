@@ -6,9 +6,8 @@ ponto onde os sinais do core se tornam eventos Socket.IO e onde vive o estado
 que um browser precisa quando abre a página a meio de uma sessão: nós, canais,
 nó local, histórico de mensagens, estado da ligação.
 
-A aplicação desktop nunca precisou deste estado consolidado porque nascia com
-o worker e morria com ele. Um browser pode entrar tarde, recarregar, ou abrir
-num segundo dispositivo, e tem de receber tudo de uma vez.
+Um browser pode entrar tarde, recarregar, ou abrir num segundo dispositivo,
+e tem de receber tudo de uma vez.
 """
 
 import base64
@@ -27,8 +26,7 @@ from core.metrics_data import spreading_factor_of
 from core.node_store import NodeStore, node_record_from_nodedb
 from core import config_writer
 from core.serialize import to_jsonable
-from core.settings import settings
-from i18n import get_language, set_language, tr
+from i18n import current_language, lazy_tr, normalize_language, tr
 from server import events as ev
 from server.bridge_manager import BridgeManager, list_serial_ports
 
@@ -329,7 +327,6 @@ class MeshSession:
         self.nodes.update(node_id, updates, packet)
         # Com pacote, o raw_packet_received já o contou nas métricas; aqui só
         # entram as actualizações sem pacote (NodeDB, leitura do nó local).
-        # Como no desktop (main.py, _on_node_updated_metrics).
         if packet is None:
             self.metrics.ingest_packet(None, updates, node_id)
         lat, lon = updates.get("latitude"), updates.get("longitude")
@@ -429,8 +426,8 @@ class MeshSession:
     def _emit_packet_stats(self):
         """Difunde SNR e pacotes/min a ritmo fixo.
 
-        No desktop isto era recalculado a cada pacote; numa rede movimentada
-        seria uma mensagem Socket.IO por pacote só para mexer um rótulo.
+        Recalcular a cada pacote seria, numa rede movimentada, uma mensagem
+        Socket.IO por pacote só para mexer um rótulo.
         """
         cutoff = time.time() - PACKET_RATE_WINDOW_S
         while self._packet_times and self._packet_times[0] < cutoff:
@@ -445,7 +442,7 @@ class MeshSession:
     # ------------------------------------------------------------------
     def snapshot(self) -> dict:
         return {
-            "language":       get_language(),
+            "language":       current_language(),
             "connection":     self._connection_payload(),
             "reconnect":      dict(self.reconnect),
             "nodes":          [self._node_payload(n) for n in self.nodes.all()],
@@ -469,7 +466,7 @@ class MeshSession:
     # ------------------------------------------------------------------
     def _require_worker(self) -> Optional[MeshtasticWorker]:
         if self.worker is None or not self.connected:
-            self._broadcast(ev.ERROR, ev.error_occurred(tr("err_send_msg")))
+            self._broadcast(ev.ERROR, ev.error_occurred(lazy_tr("err_send_msg")))
             return None
         return self.worker
 
@@ -486,8 +483,7 @@ class MeshSession:
             worker.send_direct_message(dest_id, text, int(reply_id or 0))
 
     def _remember_reply(self, key: str, text: str, reply_id) -> None:
-        """Os sinais de "enviada" do worker (partilhados com o desktop) não
-        trazem o reply_id; guarda-se aqui até a mensagem voltar como enviada."""
+        """Os sinais de "enviada" do worker não trazem o reply_id; guarda-se aqui até a mensagem voltar como enviada."""
         if reply_id:
             with self._reply_lock:
                 self._pending_replies[(key, text)] = int(reply_id)
@@ -532,15 +528,16 @@ class MeshSession:
                                        "counts": self._counts()})
         return {"node_id": node_id, "favorite": now_favorite}
 
-    def set_language(self, language: str) -> dict:
-        set_language(language)
-        # Gravado na mesma chave que o desktop e o run_server.py lêem no arranque.
-        settings().set_value("language", get_language())
-        # As etiquetas das secções de métricas e os textos do HTML gerado
-        # dependem do idioma activo, por isso o cliente recarrega-as.
-        return {"language": get_language(),
-                "metric_sections": [{"key": key, "label": tr(label)}
-                                    for key, label in SECTIONS]}
+    @staticmethod
+    def metric_sections(language: str) -> dict:
+        """Etiquetas das secções de métricas num idioma: cada dispositivo
+        escolhe o seu, e o do servidor não muda."""
+        from i18n import use_language
+        language = normalize_language(language)
+        with use_language(language):
+            return {"language": language,
+                    "metric_sections": [{"key": key, "label": tr(label)}
+                                        for key, label in SECTIONS]}
 
     # -- configuração do nó -------------------------------------------------
     def _config_iface(self):
