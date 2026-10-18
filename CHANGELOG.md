@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [2.2.0-beta] — 2026-10-18
+
 ### Added
 
 - **🗄 Metrics history (last 24 h).** The metrics survive a server restart:
@@ -597,6 +601,7 @@ First public release.
 > (ClockworkPi uConsole CM4) with a live Meshtastic network. Expect occasional
 > rough edges; bug reports and pull requests are welcome.
 
+[2.2.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.2.0-beta
 [2.1.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.1.0-beta
 [2.0.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.0.0-beta
 [1.0.5-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.5-beta
