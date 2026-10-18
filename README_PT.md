@@ -1,4 +1,4 @@
-# 📡 MeshDeckWeb
+# <img src="web/img/logo.svg" width="40" alt="" align="top"> MeshDeckWeb
 
 Interface web para monitorizar, comunicar e configurar redes
 [Meshtastic](https://meshtastic.org) — a partir do telemóvel, de um tablet ou
@@ -341,7 +341,8 @@ meshdeckweb/
 ├── meshtastic_bridge.py   ← Ponte série USB → TCP
 ├── docs/screenshots/      ← Imagens dos READMEs (en/pt)
 ├── tests/                 ← Testes (pytest)
-└── requirements.txt
+├── requirements.txt
+└── THIRD_PARTY_NOTICES.md ← Licenças das bibliotecas incluídas e das dependências
 ```
 
 Para correr os testes:
@@ -401,3 +402,14 @@ revisão das métricas e as métricas novas.
 
 O código foi revisto, testado e validado pelo autor em hardware real
 (ClockworkPi uConsole CM4 e iPhone) com uma rede Meshtastic activa.
+
+---
+
+## 📄 Licença
+
+O MeshDeckWeb é distribuído sob a [licença MIT](LICENSE). As bibliotecas
+incluídas (Chart.js, Leaflet, Socket.IO) e as dependências Python mantêm as
+suas próprias licenças, listadas em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Meshtastic® é uma marca registada da Meshtastic LLC. O MeshDeckWeb é um
+projecto independente, sem afiliação nem aprovação da Meshtastic LLC.

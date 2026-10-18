@@ -1,4 +1,4 @@
-# 📡 MeshDeckWeb
+# <img src="web/img/logo.svg" width="40" alt="" align="top"> MeshDeckWeb
 
 Web interface for monitoring, messaging and configuring
 [Meshtastic](https://meshtastic.org) networks — from a phone, a tablet or any
@@ -336,7 +336,8 @@ meshdeckweb/
 ├── meshtastic_bridge.py   ← USB-to-TCP serial bridge
 ├── docs/screenshots/      ← README images (en/pt)
 ├── tests/                 ← pytest suite
-└── requirements.txt
+├── requirements.txt
+└── THIRD_PARTY_NOTICES.md ← Licenses of the bundled libraries and dependencies
 ```
 
 Run the tests with:
@@ -395,3 +396,14 @@ metrics review and the new metrics.
 
 The code was reviewed, tested and validated by the author on real hardware
 (ClockworkPi uConsole CM4 and an iPhone) with a live Meshtastic network.
+
+---
+
+## 📄 License
+
+MeshDeckWeb is released under the [MIT License](LICENSE). The bundled
+libraries (Chart.js, Leaflet, Socket.IO) and the Python dependencies keep their
+own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Meshtastic® is a registered trademark of Meshtastic LLC. MeshDeckWeb is an
+independent project, not affiliated with or endorsed by Meshtastic LLC.

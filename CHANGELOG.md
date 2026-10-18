@@ -9,6 +9,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **New logo.** Three linked nodes around a fourth (your own node, in blue),
+  in the interface's green and blue. It replaces the Meshtastic symbol as the
+  browser icon, the home-screen icon (now a 180 px PNG, which iOS needs) and
+  the mark in the header and on the login screen.
+- README screenshots taken again, with the new logo.
+
+### Added
+
+- `THIRD_PARTY_NOTICES.md` with the licenses of the bundled libraries
+  (Chart.js, Leaflet, Socket.IO) and of the Python dependencies.
+- A License section in the README, with a note that MeshDeckWeb is not
+  affiliated with Meshtastic LLC.
+- `SECURITY.md`: how to report a vulnerability privately.
+
 ---
 
 ## [2.2.0-beta] — 2026-10-18
