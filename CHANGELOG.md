@@ -9,6 +9,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **🗄 Metrics history (last 24 h).** The metrics survive a server restart:
+  the server stores what goes into them — packets, node updates, sent
+  messages and their ACKs, distilled to the fields the metrics read, never
+  message text — in `~/.config/meshdeck/metrics/<node>.sqlite`, one file per
+  local node, written once a minute. On start, or when connecting to a
+  different node, the stored events go through the same code as live
+  packets, with their original time. A full day of a busy mesh (30
+  packets/min) is about 12 MB and comes back in about 2 s on a uConsole
+  (CM4).
+  - Disk safety: at most 50 MB per node (the oldest events go first), and
+    no writing while the disk has less than 100 MB free — the metrics keep
+    working in memory.
+  - "🗑 clear metrics" also empties the stored history.
+- **📈 Chart window: 1 h, 6 h or 24 h**, chosen in the metrics tab and
+  remembered on each device. Every chart over time follows it (channel use,
+  active nodes, duty cycle, noise floor, temperature) and the traffic chart
+  shows packets per 1, 5 or 15 min. Charts keep at most 240 points.
+
+### Changed
+
+- Time series keep 24 h instead of the last 120 samples, and the packet
+  timeline 24 h instead of the last 5000 packets.
+- The overview shows "Data since" (the oldest data kept) instead of
+  "Session started".
+
+### Fixed
+
+- "🗑 clear metrics" no longer forgets which node is the local one, which
+  left the Local Node section waiting until the next connection.
+
 ---
 
 ## [2.1.0-beta] — 2026-10-18

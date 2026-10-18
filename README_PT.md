@@ -90,7 +90,10 @@ igualmente bem num browser de computador.
 
 ### 📊 Métricas (12 secções)
 
-Os gráficos actualizam-se em tempo real, sem recarregar a página.
+Os gráficos actualizam-se em tempo real, sem recarregar a página. O servidor
+guarda as **últimas 24 horas** em disco, um histórico por nó local, por isso
+as métricas voltam depois de reiniciar; os gráficos mostram **1 h, 6 h ou
+24 h** (escolha de cada dispositivo). O texto das mensagens nunca fica lá.
 
 | Secção | O que mede |
 |--------|-----------|
@@ -98,7 +101,7 @@ Os gráficos actualizam-se em tempo real, sem recarregar a página.
 | 🏠 Nó Local | Bateria, uso do canal, duty cycle/h, SNR recebido, mensagens, RTT, **saúde do rádio (LocalStats)** e **máquina do meshtasticd (HostMetrics)** |
 | 📡 Canal & Airtime | Utilização do canal e duty cycle horário por nó face ao limite UE de 10 % |
 | 📶 Qualidade RF | SNR e **RSSI** só de pacotes de rádio, hops por pacote, **hop limit esgotado**, tabela SNR × RSSI com indicação de ruído/sinal fraco |
-| 📦 Tráfego | Pacotes por tipo e por minuto, RF vs MQTT, directos vs retransmitidos |
+| 📦 Tráfego | Pacotes por tipo e ao longo do tempo, RF vs MQTT, directos vs retransmitidos |
 | 🔋 Nós & Bateria | Bateria, tensão, uptime, modelos de hardware, GPS |
 | 🌡 Ambiente & Energia | Temperatura, humidade, pressão, qualidade do ar e sensores de energia INA, gráfico de temperatura |
 | ✅ Fiabilidade | Entrega de DMs, mensagens de canal confirmadas por retransmissão, duplicados medidos pelo firmware |
@@ -313,12 +316,14 @@ As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`
 | `server.json` | Chave de sessão, hash da password, endereço, definições HTTPS |
 | `settings.json` | Idioma do servidor (terminal, logs) e outras preferências |
 | `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
+| `metrics/` | Histórico das métricas das últimas 24 h, um ficheiro SQLite por nó local (no máximo 50 MB cada; a escrita pára com menos de 100 MB livres no disco). "🗑 limpar métricas" esvazia-o |
 
 Os mosaicos do mapa offline ficam em `~/.cache/meshdeck/tiles/` (ou
 `$XDG_CACHE_HOME/meshdeck/tiles/`) e podem ser apagados a qualquer momento.
 
 A password nunca fica guardada em claro. As escolhas de cada dispositivo (som,
-vista da lista de nós) ficam no respectivo browser.
+vista da lista de nós, janela dos gráficos das métricas) ficam no respectivo
+browser.
 
 ---
 

@@ -12,6 +12,10 @@
  * recarregar a página,
  * por isso o scroll e o estado dos gráficos ficam onde o utilizador os
  * deixou. Recarrega-se apenas quando não há alternativa (ver tick()).
+ *
+ * Os gráficos no tempo mostram a janela escolhida (1 h, 6 h ou 24 h); o
+ * servidor guarda 24 h e repõe-nas depois de reiniciar. A escolha fica neste
+ * dispositivo.
  */
 'use strict';
 
@@ -22,6 +26,15 @@ import { t } from '../i18n.js';
 import { getJSON } from '../api.js';
 
 const REFRESH_MS = 5000;
+const WINDOW_KEY = 'meshdeck.metricsWindow';
+const WINDOWS = ['3600', '21600', '86400'];
+const DEFAULT_WINDOW = '21600';
+
+let chartWindow = DEFAULT_WINDOW;
+try {
+  const saved = localStorage.getItem(WINDOW_KEY);
+  if (WINDOWS.includes(saved)) chartWindow = saved;
+} catch { /* sem storage */ }
 
 let activeKey = null;
 let refreshTimer = null;
@@ -33,7 +46,7 @@ let loadedReloadKey = '';
 
 export function mount() {
   document.getElementById('metrics-clear').addEventListener('click', () => {
-    if (!confirm(t('Limpar todos os dados de métricas recolhidos nesta sessão?'))) return;
+    if (!confirm(t('Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?'))) return;
     commands.clearMetrics();
     loadFrame();   // a secção activa reflecte o esquecimento de imediato
   });
@@ -46,7 +59,22 @@ export function mount() {
   store.on('search-changed', applyFilter);
 
   document.getElementById('metrics-frame').addEventListener('load', onFrameLoad);
+  document.getElementById('metrics-window').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-window]');
+    if (!button || button.dataset.window === chartWindow) return;
+    chartWindow = button.dataset.window;
+    try { localStorage.setItem(WINDOW_KEY, chartWindow); } catch { /* sem storage */ }
+    renderWindow();
+    loadFrame({ keepScroll: true });
+  });
+  renderWindow();
   renderSectionList();
+}
+
+function renderWindow() {
+  document.querySelectorAll('#metrics-window [data-window]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.window === chartWindow);
+  });
 }
 
 export function onShow() {
@@ -80,7 +108,8 @@ function activate(key) {
 }
 
 async function fetchState(key) {
-  const { ok, data } = await getJSON(`/api/metrics/${encodeURIComponent(key)}/refresh`);
+  const { ok, data } = await getJSON(
+    `/api/metrics/${encodeURIComponent(key)}/refresh?window=${chartWindow}`);
   return ok ? data : null;
 }
 
@@ -102,7 +131,7 @@ async function loadFrame({ keepScroll = false } = {}) {
   loadedHasData = state ? state.has_data : true;
   loadedReloadKey = state ? state.reload_key : '';
   // Cache-busting: o browser não pode servir uma versão antiga da secção.
-  frame.src = `/api/metrics/${encodeURIComponent(key)}?t=${Date.now()}`;
+  frame.src = `/api/metrics/${encodeURIComponent(key)}?window=${chartWindow}&t=${Date.now()}`;
   scheduleRefresh();
 }
 

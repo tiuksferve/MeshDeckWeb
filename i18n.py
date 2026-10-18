@@ -480,9 +480,10 @@ _STRINGS: dict = {
                                      "en": "📡 Traceroute: {origin} → {dest}  ({n} links)"},
 
     # ── Métricas — geral ─────────────────────────────────────────────────────
-    "Limpar todos os dados de métricas recolhidos nesta sessão?":
-                                    {"pt": "Limpar todos os dados de métricas recolhidos nesta sessão?",
-                                     "en": "Clear all metrics data collected in this session?"},
+    "Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?":
+                                    {"pt": "Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?",
+                                     "en": "Clear all metrics data, including the saved history of the last 24 h?"},
+    "Janela dos gráficos":          {"pt": "Janela dos gráficos",               "en": "Chart window"},
     "📊 Visão Geral":               {"pt": "📊 Visão Geral",                    "en": "📊 Overview"},
     "📡 Canal & Airtime":           {"pt": "📡 Canal & Airtime",                "en": "📡 Channel & Airtime"},
     "📶 Qualidade RF":              {"pt": "📶 Qualidade RF",                   "en": "📶 RF Quality"},
@@ -504,7 +505,7 @@ _STRINGS: dict = {
 
     # ── Métricas — KPIs e textos HTML ────────────────────────────────────────
     "nós":                          {"pt": "nós",                            "en": "nodes"},
-    "Sessão iniciada":              {"pt": "Sessão iniciada",                "en": "Session started"},
+    "Dados desde":                  {"pt": "Dados desde",                    "en": "Data since"},
     "ID":                           {"pt": "ID",                             "en": "ID"},
     "Resumo da sessão": {"pt": "Resumo da sessão", "en": "Session summary"},
     "Total Pacotes":                {"pt": "Total Pacotes",                     "en": "Total Packets"},
@@ -605,9 +606,9 @@ _STRINGS: dict = {
                                     {"pt": "Distribuição de tráfego da sessão", "en": "Session traffic distribution"},
     "Padrão de Routing":            {"pt": "Padrão de Routing",                 "en": "Routing Pattern"},
     "Pacotes por Tipo — Sessão":    {"pt": "Pacotes por Tipo — Sessão",         "en": "Packets by Type — Session"},
-    "Pacotes por Minuto (últimos 30 min)":
-                                    {"pt": "Pacotes por Minuto (últimos 30 min)",
-                                     "en": "Packets per Minute (last 30 min)"},
+    "Pacotes por {step}, janela de {window}":
+                                    {"pt": "Pacotes por {step}, janela de {window}",
+                                     "en": "Packets per {step}, {window} window"},
     "🔵 1 Hop":                     {"pt": "🔵 1 Hop",                        "en": "🔵 1 Hop"},
     "🟠 Multi-hop":                 {"pt": "🟠 Multi-hop",                    "en": "🟠 Multi-hop"},
     "📊 Telemetria":               {"pt": "📊 Telemetria",                   "en": "📊 Telemetry"},

@@ -8,7 +8,7 @@ Os dados vêm de MetricsDataMixin; os dois juntam-se em core/metrics.py
 import json
 import time
 
-from i18n import date_locale, fmt_clock, fmt_datetime, tr
+from i18n import date_locale, fmt_datetime, tr
 
 
 class MetricsRenderMixin:
@@ -97,11 +97,11 @@ class MetricsRenderMixin:
         now = time.time()
         total_pkts = len(self._packets)
         cutoff2h   = now - 7200
-        active_nids = set(p[1] for p in self._packets if p[0] >= cutoff2h and p[1])
+        active_nids = set(p[1] for p in self._packets_since(cutoff2h) if p[1])
         n_active   = len(active_nids)
 
         # Pacotes último minuto
-        ppm = len([p for p in self._packets if p[0] >= now - 60])
+        ppm = len(self._packets_since(now - 60))
 
         snr_avg = round(sum(self._snr_values) / len(self._snr_values), 1) if self._snr_values else None
         hops_avg = round(sum(self._hops_values) / len(self._hops_values), 2) if self._hops_values else None
@@ -166,7 +166,7 @@ class MetricsRenderMixin:
   <div style="margin-bottom:6px;font-size:11px;color:#8b949e">{tr("metrics_filter_hint")}</div>
   <table><tr><th>ID</th><th>{tr("Nome")}</th><th>{tr("Pacotes")}</th><th>Ch. Util.</th><th>{tr("Bateria")}</th></tr><tbody id="ov-node-tbody" data-filterable="1">{rows}</tbody></table>
 </div>
-<div class="updated" id="ov-updated">{tr('Sessão iniciada')} · {fmt_datetime(self._start_time, seconds=True)}</div>
+<div class="updated" id="ov-updated">{tr('Dados desde')} · {fmt_datetime(self._start_time, seconds=True)}</div>
 <script>
 window._metricsUpdateData = function(d) {{
   function kpiColor(val, thresholds) {{
@@ -252,8 +252,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         worst_nid = max(duty_per_node, key=duty_per_node.get) if duty_per_node else None
         worst_dc  = duty_per_node[worst_nid] if worst_nid else None
 
-        ts_labels = [self._ts_label(t) for t, _ in self._ch_util_ts]
-        ts_vals   = [v for _, v in self._ch_util_ts]
+        ts_labels, ts_vals = self._series(self._ch_util_ts)
 
         def duty_status(dc):
             if dc >= self.DUTY_CYCLE_LIMIT_EU: return "red",    tr("🚨 LIMITE EXCEDIDO")
@@ -630,7 +629,6 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
 
     # ── 4. Tráfego ────────────────────────────────────────────────────────
     def _html_traffic(self) -> str:
-        now = time.time()
         if not self._packets:
             body = f'<div class="no-data">{tr("⏳ Aguardando pacotes...")}</div>'
             return self._base_html(tr("📦 Tráfego de Rede"), body)
@@ -681,14 +679,9 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
         routing_colors = ['#39d353', '#58a6ff', '#f0883e', '#8b949e']
 
         # ── Série temporal ─────────────────────────────────────────────
-        bins_60 = []
-        for i in range(29, -1, -1):
-            t0 = now - (i + 1) * 60
-            t1 = now - i * 60
-            cnt = len([p for p in self._packets if t0 <= p[0] < t1])
-            bins_60.append((fmt_clock(t1), cnt))
-        ppm_labels = [b[0] for b in bins_60]
-        ppm_vals   = [b[1] for b in bins_60]
+        bins = self._traffic_bins()
+        ppm_labels = [b[0] for b in bins]
+        ppm_vals   = [b[1] for b in bins]
 
         body = f"""
 <div class="subtitle">{tr("Distribuição de tráfego da sessão")}</div>
@@ -727,7 +720,7 @@ window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase
 
 <!-- Linha 3: PPM -->
 <div class="card" style="margin-top:16px">
-  <h3>{tr("Pacotes por Minuto (últimos 30 min)")}</h3>
+  <h3>{self._traffic_title()}</h3>
   <div class="chart-wrap-lg"><canvas id="ppmChart"></canvas></div>
 </div>
 
@@ -778,7 +771,7 @@ window._ppmChart = new Chart(document.getElementById('ppmChart'), {{
   type: 'line',
   data: {{
     labels: {json.dumps(ppm_labels)},
-    datasets: [{{ label: '{tr("Pacotes/min")}', data: {json.dumps(ppm_vals)},
+    datasets: [{{ label: '{tr("Pacotes")}', data: {json.dumps(ppm_vals)},
       borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
       fill: true, tension: 0.3, pointRadius: 1 }}]
   }},
@@ -837,7 +830,7 @@ window._metricsUpdateData = function(d) {{
         now      = time.time()
         cutoff2h = now - 7200
 
-        active_nids = set(p[1] for p in self._packets if p[0] >= cutoff2h and p[1])
+        active_nids = set(p[1] for p in self._packets_since(cutoff2h) if p[1])
         n_active    = len(active_nids)
 
         # batteryLevel=101 → alimentação externa (Powered); 0 → sem dados
@@ -847,8 +840,7 @@ window._metricsUpdateData = function(d) {{
         n_battery  = len(batt_real)
         batt_avg   = round(sum(batt_real.values()) / len(batt_real), 0) if batt_real else None
 
-        ts_labels = [self._ts_label(t) for t, _ in self._nodes_active_ts]
-        ts_vals   = [v for _, v in self._nodes_active_ts]
+        ts_labels, ts_vals = self._series(self._nodes_active_ts)
 
         batt_bucket_labels = ['0–20%', '21–40%', '41–60%', '61–80%', '81–100%']
         batt_counts        = [0, 0, 0, 0, 0]
@@ -1879,13 +1871,14 @@ window._noiseChart = new Chart(document.getElementById('noiseChart'), {{
 
         radio_html, radio_js = self._html_radio_health()
 
-        n_dc = len(self._local_dc_ts)
+        dc_labels, dc_vals = self._series(self._local_dc_ts)
+        n_dc = len(dc_vals)
         dc_chart_html_note = tr("Valor do firmware (airUtilTx): % do tempo a transmitir na última hora.")
 
         if n_dc > 1:
             import json as _json
-            ts_lbl = _json.dumps([self._ts_label(t) for t, _ in self._local_dc_ts])
-            ts_val = _json.dumps([v for _, v in self._local_dc_ts])
+            ts_lbl = _json.dumps(dc_labels)
+            ts_val = _json.dumps(dc_vals)
             lbl_dc_hist   = tr("Duty Cycle/h (%)")
             dc_chart_js = f"""
 window._dcChart = new Chart(document.getElementById('dcChart'), {{

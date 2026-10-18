@@ -12,6 +12,7 @@ e tem de receber tudo de uma vez.
 
 import base64
 import logging
+import sqlite3
 import threading
 import time
 from collections import deque
@@ -23,6 +24,7 @@ from core.mesh_worker import MeshtasticWorker
 from core.messages import MessageStore, channel_key, dm_key
 from core.metrics import SECTIONS, MeshMetrics
 from core.metrics_data import spreading_factor_of
+from core import metrics_history as mh
 from core.node_store import NodeStore, node_record_from_nodedb
 from core import config_writer
 from core.serialize import to_jsonable
@@ -36,6 +38,7 @@ PACKET_STATS_INTERVAL_MS = 5_000    # ritmo do indicador de SNR/pkt-min
 PACKET_RATE_WINDOW_S = 60
 LOG_BUFFER_LINES = 500
 CONFIG_LOCK_TIMEOUT_S = 120         # um lock abandonado não bloqueia para sempre
+UNOWNED_EVENTS_MAX = 20_000         # eventos antes de se saber o nó local
 
 
 class LogStream(logging.Handler):
@@ -158,6 +161,17 @@ class MeshSession:
         self._stats_timer = self.loop.every(PACKET_STATS_INTERVAL_MS,
                                             self._emit_packet_stats)
 
+        # Histórico das métricas em disco (core/metrics_history.py), um
+        # ficheiro por nó local. O do último nó repõe-se já, na thread do
+        # loop: os eventos que chegarem entretanto esperam pela vez deles e
+        # entram depois dos antigos, por ordem.
+        self.history: Optional[mh.MetricsHistory] = None
+        self._history_dir = mh.history_dir(config.path)
+        self._unowned: list = []       # (ts, tipo, dados) antes de haver nó
+        self._history_timer = self.loop.every(mh.FLUSH_MS, self._flush_history)
+        if config.metrics_node:
+            self.loop.post(self._open_history, config.metrics_node)
+
     # ------------------------------------------------------------------
     # Ciclo de vida da ligação
     # ------------------------------------------------------------------
@@ -202,11 +216,86 @@ class MeshSession:
         self._broadcast(ev.CONNECTION, self._connection_payload())
 
     def shutdown(self):
-        """Paragem ordenada: ponte, worker, loop e handler de log."""
+        """Paragem ordenada: ponte, worker, loop, histórico e handler de log."""
         self.disconnect()
         self._stats_timer.stop()
+        self._history_timer.stop()
         self.loop.stop()
+        if self.history is not None:
+            self.history.close()
         self.log.detach()
+
+    # ------------------------------------------------------------------
+    # Histórico das métricas
+    # ------------------------------------------------------------------
+    def _remember(self, kind: str, ts: float, data):
+        """Guarda um evento de métricas para o histórico do nó local."""
+        if self.history is not None:
+            self.history.record(kind, ts, data)
+        else:
+            self._unowned.append((ts, kind, data))
+            if len(self._unowned) > UNOWNED_EVENTS_MAX:
+                del self._unowned[:len(self._unowned) - UNOWNED_EVENTS_MAX]
+
+    def _apply(self, kind: str, ts: float, data: dict):
+        """Um evento do histórico pelo mesmo método de ingestão do vivo."""
+        m = self.metrics
+        if kind == mh.PACKET:
+            m.ingest_raw_packet(data, ts)
+        elif kind == mh.NODE:
+            m.ingest_packet(None, data["data"], data["nid"], ts)
+        elif kind == mh.POSITION:
+            m.ingest_node_position(data["nid"], data["lat"], data["lon"])
+        elif kind == mh.SENT:
+            m.ingest_message_sent(data["id"], data["kind"], ts)
+        elif kind == mh.STATUS:
+            m.ingest_message_status(data["id"], data["status"], ts)
+        elif kind == mh.NEIGHBOR:
+            m.ingest_neighbor_info(data["from"], [tuple(n) for n in data["neighbors"]])
+
+    def _open_history(self, node_id: str):
+        """Passa as métricas para o histórico deste nó local: esquece o que
+        está em memória, repõe as últimas 24 h do ficheiro e junta, por cima,
+        o que chegou antes de se saber qual era o nó. Corre na thread do loop."""
+        if not node_id or (self.history is not None and self.history.node_id == node_id):
+            return
+        unowned, self._unowned = self._unowned, []
+        if self.history is not None:
+            # Troca de nó: o que estava pendente pertence ao anterior.
+            self.history.close()
+            self.history = None
+            unowned = []
+        try:
+            history = mh.MetricsHistory(self._history_dir, node_id)
+        except (OSError, sqlite3.Error) as e:
+            logger.warning("histórico de métricas indisponível (%s); só em memória", e)
+            return
+        started = time.monotonic()
+        self.metrics.clear()
+        self.metrics.set_local_node_id(node_id)
+        count, first = 0, None
+        for ts, kind, data in history.events():
+            try:
+                self._apply(kind, ts, data)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.debug("evento do histórico ignorado (%s): %s", kind, e)
+                continue
+            if first is None:
+                first = ts
+            count += 1
+        if first is not None:
+            self.metrics._start_time = first
+        for ts, kind, data in unowned:
+            self._apply(kind, ts, data)
+            history.record(kind, ts, data)
+        self.history = history
+        self._config.set_metrics_node(node_id)
+        logger.info("histórico de métricas de %s: %d eventos repostos em %.1f s",
+                    node_id, count, time.monotonic() - started)
+
+    def _flush_history(self):
+        if self.history is not None:
+            self.history.flush()
 
     # ------------------------------------------------------------------
     # Ligação dos sinais do core aos eventos Socket.IO
@@ -284,6 +373,7 @@ class MeshSession:
         self.nodes.set_local_node(node_id)
         self.messages.set_local_node(node_id)
         self.metrics.set_local_node_id(node_id)
+        self._open_history(node_id)
         self._broadcast(ev.MY_NODE_ID, ev.my_node_id_ready(node_id))
 
     def _on_local_node_ready(self, long_name, short_name, node_id,
@@ -301,6 +391,8 @@ class MeshSession:
         # O alcance directo mede a partir daqui (Métricas → Alcance & Links).
         if found and self.metrics._local_nid:
             self.metrics.ingest_node_position(self.metrics._local_nid, lat, lon)
+            self._remember(mh.POSITION, time.time(),
+                           {"nid": self.metrics._local_nid, "lat": lat, "lon": lon})
         self._broadcast(ev.LOCAL_POSITION, self.local_position)
 
     # -- nós --------------------------------------------------------------
@@ -316,7 +408,9 @@ class MeshSession:
             nid, data = parsed
             # Posições, bateria e nomes conhecidos da NodeDB: as métricas
             # (alcance directo, retransmissores) não esperam por pacotes novos.
-            self.metrics.ingest_packet(None, data, nid)
+            ts = time.time()
+            self.metrics.ingest_packet(None, data, nid, ts)
+            self._remember(mh.NODE, ts, {"nid": nid, "data": mh.distill_node(data)})
             record = self.nodes.get(nid)
             if record is not None:
                 records.append(self._node_payload(record))
@@ -327,11 +421,14 @@ class MeshSession:
         self.nodes.update(node_id, updates, packet)
         # Com pacote, o raw_packet_received já o contou nas métricas; aqui só
         # entram as actualizações sem pacote (NodeDB, leitura do nó local).
+        ts = time.time()
         if packet is None:
-            self.metrics.ingest_packet(None, updates, node_id)
+            self.metrics.ingest_packet(None, updates, node_id, ts)
+            self._remember(mh.NODE, ts, {"nid": node_id, "data": mh.distill_node(updates)})
         lat, lon = updates.get("latitude"), updates.get("longitude")
         if lat is not None and lon is not None:
             self.metrics.ingest_node_position(node_id, lat, lon)
+            self._remember(mh.POSITION, ts, {"nid": node_id, "lat": lat, "lon": lon})
         record = self.nodes.get(node_id)
         if record is not None:
             self._broadcast(ev.NODES, {"nodes": [self._node_payload(record)],
@@ -386,17 +483,24 @@ class MeshSession:
     def _on_channel_message_sent(self, channel: int, text: str, packet_id: int):
         key, entry = self.messages.add_outgoing_channel(
             channel, text, packet_id, self._take_reply(channel_key(channel), text))
-        self.metrics.ingest_message_sent(packet_id, kind="channel")
+        self._message_sent(packet_id, "channel")
         self._broadcast(ev.MESSAGE_SENT, {"key": key, "message": to_jsonable(entry)})
 
     def _on_dm_sent(self, dest_id: str, text: str, pki: bool, packet_id: int):
         key, entry = self.messages.add_outgoing_dm(
             dest_id, text, pki, packet_id, self._take_reply(dm_key(dest_id), text))
-        self.metrics.ingest_message_sent(packet_id, kind="dm")
+        self._message_sent(packet_id, "dm")
         self._broadcast(ev.MESSAGE_SENT, {"key": key, "message": to_jsonable(entry)})
 
+    def _message_sent(self, packet_id: int, kind: str):
+        ts = time.time()
+        self.metrics.ingest_message_sent(packet_id, kind, ts)
+        self._remember(mh.SENT, ts, {"id": packet_id, "kind": kind})
+
     def _on_message_status(self, packet_id: int, status: str, error_reason: str):
-        self.metrics.ingest_message_status(packet_id, status)
+        ts = time.time()
+        self.metrics.ingest_message_status(packet_id, status, ts)
+        self._remember(mh.STATUS, ts, {"id": packet_id, "status": status})
         entry = self.messages.update_status(packet_id, status, error_reason)
         payload = ev.message_status_updated(packet_id, status, error_reason)
         if entry is not None:
@@ -411,12 +515,14 @@ class MeshSession:
 
     def _on_neighbor_info(self, from_id: str, neighbors: list):
         self.metrics.ingest_neighbor_info(from_id, neighbors)
+        self._remember(mh.NEIGHBOR, time.time(), {"from": from_id, "neighbors": neighbors})
         self._broadcast(ev.NEIGHBORS, ev.neighbor_info_received(from_id, neighbors))
 
     # -- pacotes ----------------------------------------------------------
     def _on_raw_packet(self, packet: dict):
-        self.metrics.ingest_raw_packet(packet)
         now = time.time()
+        self.metrics.ingest_raw_packet(packet, now)
+        self._remember(mh.PACKET, now, mh.distill_packet(packet))
         self._packet_times.append(now)
         snr = packet.get("rxSnr")
         if snr is not None:
@@ -577,7 +683,14 @@ class MeshSession:
         return result
 
     def clear_metrics(self):
+        """Esquece as métricas, em memória e no histórico em disco. O nó local
+        continua o mesmo (antes ficava esquecido até à ligação seguinte)."""
+        local_nid = self.metrics._local_nid
         self.metrics.clear()
+        self.metrics.set_local_node_id(local_nid)
+        self._unowned = []
+        if self.history is not None:
+            self.history.clear()
 
     def metrics_html(self, section: str) -> str:
         return self.metrics.html_for(section)

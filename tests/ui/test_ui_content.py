@@ -77,6 +77,22 @@ def test_metrics_charts_are_drawn(page):
                   timeout=15, message="a secção RF não desenhou gráficos")
 
 
+def test_metrics_window_selector_changes_the_charts(page):
+    page.click("[data-tab=metrics]")
+    page.click("#metrics-list li[data-key=traffic]")
+    page.wait_for("document.querySelector('#metrics-window [data-window=\"21600\"]').classList.contains('active')",
+                  message="a janela por omissão não é 6 h")
+    page.click("#metrics-window [data-window='86400']")
+    try:
+        page.wait_for(f"{FRAME}.src.includes('window=86400')"
+                      f" && {FRAME}.contentDocument?.readyState === 'complete'"
+                      f" && {FRAME}.contentDocument.body?.textContent.includes('15 min')",
+                      timeout=15, message="o gráfico de tráfego não passou para 24 h")
+        assert page.js("localStorage.getItem('meshdeck.metricsWindow')") == "86400"
+    finally:
+        page.click("#metrics-window [data-window='21600']")
+
+
 # ---------------------------------------------------------------------------
 # Configuração do nó
 # ---------------------------------------------------------------------------

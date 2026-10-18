@@ -118,6 +118,15 @@ class ServerConfig:
     def set_tile_cache_mb(self, megabytes: int):
         self._s.set_value("tile_cache_mb", max(int(megabytes), 0))
 
+    @property
+    def metrics_node(self) -> str:
+        """Nó local do último histórico de métricas, reposto no arranque."""
+        return self._s.value("metrics_node", "") or ""
+
+    def set_metrics_node(self, node_id: str):
+        if node_id != self.metrics_node:
+            self._s.set_value("metrics_node", node_id)
+
     def set_tls(self, cert: str, key: str):
         self._s.update({"tls_cert": os.path.abspath(cert), "tls_key": os.path.abspath(key)})
 

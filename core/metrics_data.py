@@ -12,15 +12,72 @@ CORRECÇÕES (v1.0.3):
   - IMPRECISÃO: n_gps_unique usa _node_pos (coords validadas)
   - MELHORIA: nova secção "Nó Local"
 """
+import contextlib
 import logging
 import math
 import time
+from bisect import bisect_left
+from contextvars import ContextVar
 from datetime import datetime
 from i18n import fmt_clock, tr
 
 logger = logging.getLogger("MeshDeck.metrics")
 
 _CH_TTL_S = 1800   # 30 min sem actualização → expirar valor de ch_util/air_tx
+
+# Séries no tempo e linha temporal dos pacotes: guardam-se 24 h (o mesmo que o
+# histórico em disco, core/metrics_history.py). Os gráficos mostram a janela
+# escolhida na aba (1 h, 6 h ou 24 h), com no máximo CHART_POINTS pontos.
+SERIES_KEEP_S = 24 * 3600
+WINDOWS_S = (3600, 6 * 3600, 24 * 3600)
+DEFAULT_WINDOW_S = 6 * 3600
+CHART_POINTS = 240
+_window = ContextVar("metrics_window", default=DEFAULT_WINDOW_S)
+
+
+@contextlib.contextmanager
+def use_window(seconds):
+    """Janela dos gráficos durante um pedido; valores fora da lista caem no
+    valor por omissão."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        seconds = DEFAULT_WINDOW_S
+    token = _window.set(seconds if seconds in WINDOWS_S else DEFAULT_WINDOW_S)
+    try:
+        yield
+    finally:
+        _window.reset(token)
+
+
+def current_window() -> int:
+    return _window.get()
+
+
+def trim_series(series: list, now: float, keep_s: float = SERIES_KEEP_S):
+    """Tira do início de uma lista cronológica [(ts, …)] o que passou de keep_s."""
+    if series and series[0][0] < now - keep_s:
+        del series[:bisect_left(series, (now - keep_s,))]
+
+
+def downsample(points: list, start: float, end: float, max_points: int = CHART_POINTS) -> list:
+    """[(ts, valor)] entre start e end com no máximo max_points pontos: média
+    por intervalo igual, com a hora do último ponto de cada intervalo."""
+    points = points[bisect_left(points, (start,)):]
+    if len(points) <= max_points:
+        return list(points)
+    step = (end - start) / max_points
+    out, bucket, current = [], [], None
+    for ts, val in points:
+        idx = int((ts - start) // step)
+        if idx != current and bucket:
+            out.append((bucket[-1][0], round(sum(v for _, v in bucket) / len(bucket), 2)))
+            bucket = []
+        current = idx
+        bucket.append((ts, val))
+    if bucket:
+        out.append((bucket[-1][0], round(sum(v for _, v in bucket) / len(bucket), 2)))
+    return out
 
 # Campos de LocalStats e HostMetrics (telemetry.proto), em camelCase como a
 # biblioteca os entrega. Os uint64 chegam como texto (JSON do protobuf).
@@ -223,13 +280,13 @@ class MetricsDataMixin:
             return 0.0
         return e['val']
 
-    def _ch_util_active(self) -> dict:
-        now = time.time()
+    def _ch_util_active(self, now: float = None) -> dict:
+        now = time.time() if now is None else now
         return {nid: e['val'] for nid, e in self._ch_util.items()
                 if now - e['ts'] <= _CH_TTL_S}
 
-    def _air_tx_active(self) -> dict:
-        now = time.time()
+    def _air_tx_active(self, now: float = None) -> dict:
+        now = time.time() if now is None else now
         return {nid: e['val'] for nid, e in self._air_tx.items()
                 if now - e['ts'] <= _CH_TTL_S}
 
@@ -248,7 +305,7 @@ class MetricsDataMixin:
 
     # ── ingestão ─────────────────────────────────────────────────────────
     # ── ingestão ─────────────────────────────────────────────────────────
-    def ingest_packet(self, packet: dict, node_data: dict, nid: str = ''):
+    def ingest_packet(self, packet: dict, node_data: dict, nid: str = '', ts: float = None):
         """
         Actualização de um nó vinda do worker.
 
@@ -256,9 +313,10 @@ class MetricsDataMixin:
         do nó, identificado por `nid` — sem ele não há a quem os atribuir.
         Com pacote: só para quem não liga raw_packet_received; quem liga
         (como o servidor) não deve passar o pacote aqui, ou conta-o duas vezes.
+        ts: a hora do evento, ao repor o histórico; por omissão, agora.
         """
         if not packet:
-            self._update_from_node_data(nid, node_data)
+            self._update_from_node_data(nid, node_data, ts)
             return
 
         # Garante que o pacote tem o node_data fundido se necessário
@@ -267,12 +325,12 @@ class MetricsDataMixin:
             if not p.get('shortName'): p['shortName'] = node_data.get('short_name')
             if p.get('hopsAway') is None: p['hopsAway'] = node_data.get('hops_away')
 
-        self.ingest_raw_packet(p)
+        self.ingest_raw_packet(p, ts)
 
-    def _update_from_node_data(self, nid: str, node_data: dict):
+    def _update_from_node_data(self, nid: str, node_data: dict, ts: float = None):
         """Fallback para actualização de métricas sem recepção de pacote real."""
         if not nid or not node_data: return
-        ts = time.time()
+        ts = time.time() if ts is None else ts
         if node_data.get('short_name'):
             self._node_short[nid] = node_data['short_name']
         for field, target in [('battery_level', '_battery'), ('voltage', '_voltage'),
@@ -302,13 +360,14 @@ class MetricsDataMixin:
         if lat is not None and lon is not None:
             self.ingest_node_position(nid, lat, lon)
 
-    def ingest_raw_packet(self, packet: dict):
+    def ingest_raw_packet(self, packet: dict, ts: float = None):
         """
         Master Ingester: processa todos os pacotes recebidos pela rede (RF e MQTT).
         Unifica a detecção de duplicados, contagem de tráfego, telemetria e fiabilidade.
         Garante que loopbacks do nó local são processados para estatísticas de rede.
+        ts: a hora do pacote, ao repor o histórico; por omissão, agora.
         """
-        ts      = time.time()
+        ts      = time.time() if ts is None else ts
         pkt_id  = packet.get('id')
         nid     = packet.get('fromId', '')
         decoded = packet.get('decoded') or {}
@@ -351,9 +410,14 @@ class MetricsDataMixin:
 
         # 1. Timeline e Contadores (RF Qual, Tráfego)
         # -------------------------------------------
-        self._packets.append((ts, nid, portnum, snr if radio else None, hops, via_mqtt))
-        if len(self._packets) > 5000:
-            self._packets = self._packets[-4000:]
+        entry = (ts, nid, portnum, snr if radio else None, hops, via_mqtt)
+        if self._packets and ts < self._packets[-1][0]:
+            # Fora de ordem (o relógio recuou): a lista tem de ficar ordenada
+            # para as janelas por tempo (bisect) funcionarem.
+            self._packets.insert(bisect_left(self._packets, (ts,)), entry)
+        else:
+            self._packets.append(entry)
+        trim_series(self._packets, max(ts, self._packets[-1][0]))
 
         if radio and snr is not None:
             val_snr = float(snr)
@@ -436,11 +500,11 @@ class MetricsDataMixin:
                 if air_tx  is not None: self._air_tx[nid]  = {'val': float(air_tx),  'ts': ts}
 
                 # Série temporal ch_util (média activa)
-                active_ch = self._ch_util_active()
+                active_ch = self._ch_util_active(ts)
                 if active_ch:
                     avg = sum(active_ch.values()) / len(active_ch)
                     self._ch_util_ts.append((ts, round(avg, 1)))
-                    if len(self._ch_util_ts) > 120: self._ch_util_ts = self._ch_util_ts[-120:]
+                    trim_series(self._ch_util_ts, ts)
 
                 # Métricas específicas do nó local
                 if self._local_nid and nid == self._local_nid:
@@ -451,7 +515,7 @@ class MetricsDataMixin:
                         # é directamente o duty cycle horário.
                         dc = round(min(float(air_tx), 100.0), 2)
                         self._local_dc_ts.append((ts, dc))
-                        if len(self._local_dc_ts) > 120: self._local_dc_ts = self._local_dc_ts[-120:]
+                        trim_series(self._local_dc_ts, ts)
                     if batt is not None: self._local_battery = int(batt)
                     if volt is not None: self._local_voltage = round(float(volt), 3)
                     if uptm is not None: self._local_uptime  = int(uptm)
@@ -517,10 +581,9 @@ class MetricsDataMixin:
         # 9. Histórico de Nós Activos (a cada 60s)
         # ----------------------------------------
         if not self._nodes_active_ts or ts - self._nodes_active_ts[-1][0] >= 60:
-            cutoff = ts - 7200
-            active = len(set(p[1] for p in self._packets if p[0] >= cutoff))
+            active = len(set(p[1] for p in self._packets_since(ts - 7200)))
             self._nodes_active_ts.append((ts, active))
-            if len(self._nodes_active_ts) > 120: self._nodes_active_ts = self._nodes_active_ts[-120:]
+            trim_series(self._nodes_active_ts, ts)
 
     @staticmethod
     def _numbers(raw: dict, fields) -> dict:
@@ -555,14 +618,14 @@ class MetricsDataMixin:
         self._local_stats_ts = ts
         if stats.get("noiseFloor"):
             self._noise_ts.append((ts, stats["noiseFloor"]))
-            if len(self._noise_ts) > 120: self._noise_ts = self._noise_ts[-120:]
+            trim_series(self._noise_ts, ts)
         # Também trazem utilização do canal, airtime e uptime do nó local.
         if not self._local_nid or nid == self._local_nid:
             if "channelUtilization" in stats: self._local_ch_util = stats["channelUtilization"]
             if "airUtilTx" in stats:
                 self._local_air_tx = stats["airUtilTx"]
                 self._local_dc_ts.append((ts, round(min(stats["airUtilTx"], 100.0), 2)))
-                if len(self._local_dc_ts) > 120: self._local_dc_ts = self._local_dc_ts[-120:]
+                trim_series(self._local_dc_ts, ts)
             if stats["uptimeSeconds"]: self._local_uptime = stats["uptimeSeconds"]
 
     def _ingest_host_metrics(self, nid: str, raw: dict, ts: float):
@@ -589,7 +652,7 @@ class MetricsDataMixin:
         if 'temperature' in values:
             series = self._env_temp_ts.setdefault(nid, [])
             series.append((ts, round(values['temperature'], 1)))
-            if len(series) > 120: del series[:-120]
+            trim_series(series, ts)
 
     def _ingest_power(self, nid: str, raw: dict, ts: float):
         channels = {}
@@ -627,8 +690,10 @@ class MetricsDataMixin:
         temps = {nid: e['values']['temperature'] for nid, e in self._env.items() if 'temperature' in e['values']}
         hottest = max(temps, key=temps.get) if temps else None
         coldest = min(temps, key=temps.get) if temps else None
-        # Gráfico: os 6 nós com mais amostras, cada um na sua linha.
-        series = sorted(self._env_temp_ts.items(), key=lambda x: -len(x[1]))[:6]
+        # Gráfico: os 6 nós com mais amostras na janela, cada um na sua linha.
+        start = now - current_window()
+        series = [(nid, downsample(pts, start, now)) for nid, pts in self._env_temp_ts.items()]
+        series = sorted((x for x in series if x[1]), key=lambda x: -len(x[1]))[:6]
         return {
             "n_env": len(self._env), "n_power": len(self._power),
             "cols": [[tr(label), unit] for _k, label, unit, _d in cols],
@@ -683,8 +748,7 @@ class MetricsDataMixin:
             "uptime": s["uptimeSeconds"],
             "delta": delta,
             "stats_at": fmt_clock(self._local_stats_ts, seconds=True),
-            "noise_ts_labels": [self._ts_label(t) for t, _ in self._noise_ts],
-            "noise_ts_vals": [v for _, v in self._noise_ts],
+            **dict(zip(("noise_ts_labels", "noise_ts_vals"), self._series(self._noise_ts))),
             **self._data_host(),
         }
 
@@ -708,7 +772,7 @@ class MetricsDataMixin:
             if abs(lat) > 0.001 or abs(lon) > 0.001:
                 self._node_pos[nid] = (lat, lon)
 
-    def ingest_message_status(self, req_id: int, status: str):
+    def ingest_message_status(self, req_id: int, status: str, ts: float = None):
         """ACK real, NAK ou ACK implícito (o nó ouviu alguém retransmitir).
 
         Uma mensagem passa por pending → implicit → ack/nak; cada transição
@@ -732,7 +796,7 @@ class MetricsDataMixin:
             self._sent_state[req_id] = 'ack'
             sent_at = self._sent_ts.pop(req_id, None)
             if sent_at is not None:
-                rtt = round(time.time() - sent_at, 2)
+                rtt = round((time.time() if ts is None else ts) - sent_at, 2)
                 if 0 < rtt < 300:
                     self._rtt_values.append(rtt)
                     if len(self._rtt_values) > 200:
@@ -742,7 +806,7 @@ class MetricsDataMixin:
             self._sent_state[req_id] = 'implicit'
         self._refresh_if_reliability()
 
-    def ingest_message_sent(self, packet_id: int, kind: str = 'dm'):
+    def ingest_message_sent(self, packet_id: int, kind: str = 'dm', ts: float = None):
         """kind: 'dm' (espera ACK do destinatário) ou 'channel' (broadcast)."""
         self._msgs_sent += 1
         if kind == 'channel':
@@ -750,7 +814,7 @@ class MetricsDataMixin:
         if packet_id:
             self._sent_state[packet_id] = 'pending'
             self._sent_kind[packet_id] = kind
-            self._sent_ts[packet_id] = time.time()
+            self._sent_ts[packet_id] = time.time() if ts is None else ts
             # Limita a memória numa sessão longa; os contadores mantêm-se.
             if len(self._sent_state) > 2000:
                 for old in list(self._sent_state)[:500]:
@@ -782,6 +846,35 @@ class MetricsDataMixin:
     def _ts_label(self, ts: float) -> str:
         return fmt_clock(ts)
 
+    def _packets_since(self, cutoff: float) -> list:
+        """Pacotes a partir de cutoff; _packets está por ordem de chegada."""
+        return self._packets[bisect_left(self._packets, (cutoff,)):]
+
+    def _series(self, points: list):
+        """(etiquetas, valores) de uma série no tempo, na janela escolhida."""
+        now = time.time()
+        pts = downsample(points, now - current_window(), now)
+        return [self._ts_label(t) for t, _ in pts], [v for _, v in pts]
+
+    def _traffic_title(self) -> str:
+        window = current_window()
+        step = {3600: "1 min", 6 * 3600: "5 min"}.get(window, "15 min")
+        return tr("Pacotes por {step}, janela de {window}", step=step, window=f"{window // 3600} h")
+
+    def _traffic_bins(self) -> list:
+        """Pacotes por intervalo na janela escolhida: 60 intervalos de 1 min
+        em 1 h, 72 de 5 min em 6 h, 96 de 15 min em 24 h."""
+        window = current_window()
+        count = {3600: 60, 6 * 3600: 72}.get(window, 96)
+        step = window / count
+        now = time.time()
+        bins = [0] * count
+        for p in self._packets_since(now - window):
+            idx = int((p[0] - (now - window)) // step)
+            if 0 <= idx < count:
+                bins[idx] += 1
+        return [(fmt_clock(now - window + (i + 1) * step), n) for i, n in enumerate(bins)]
+
     def _now_str(self) -> str:
         return fmt_clock(datetime.now(), seconds=True)
 
@@ -792,8 +885,8 @@ class MetricsDataMixin:
     def _data_overview(self) -> dict:
         now        = time.time()
         total_pkts = len(self._packets)
-        active_nids = set(p[1] for p in self._packets if p[0] >= now-7200 and p[1])
-        ppm        = len([p for p in self._packets if p[0] >= now-60])
+        active_nids = set(p[1] for p in self._packets_since(now - 7200) if p[1])
+        ppm        = len(self._packets_since(now - 60))
         snr_avg    = round(sum(self._snr_values)/len(self._snr_values), 1) if self._snr_values else None
         hops_avg   = round(sum(self._hops_values)/len(self._hops_values), 2) if self._hops_values else None
         ch_active  = self._ch_util_active()
@@ -825,8 +918,7 @@ class MetricsDataMixin:
         worst_name = self._name(worst_nid) if worst_nid else "—"
         air_avg    = round(sum(air_active.values())/len(air_active), 2) if air_active else None
         ch_net_avg = round(sum(ch_active.values())/len(ch_active), 1) if ch_active else None
-        ts_labels  = [self._ts_label(t) for t,_ in self._ch_util_ts]
-        ts_vals    = [v for _,v in self._ch_util_ts]
+        ts_labels, ts_vals = self._series(self._ch_util_ts)
         rows = []
         all_nids = sorted(set(list(ch_active.keys()) + list(air_active.keys())))
         for nid in all_nids:
@@ -979,7 +1071,6 @@ class MetricsDataMixin:
         }
 
     def _data_traffic(self) -> dict:
-        now = time.time()
         label_map = {
             "TEXT_MESSAGE_APP":      tr("💬 Mensagem"),
             "NODEINFO_APP":          "🆔 NodeInfo",
@@ -1005,11 +1096,7 @@ class MetricsDataMixin:
         n_unknown = sum(1 for p in self._packets if p[4] is None)
         n_rf   = len([p for p in self._packets if not p[5]])
         n_mqtt = len([p for p in self._packets if p[5]])
-        bins = []
-        for i in range(29, -1, -1):
-            t0 = now-(i+1)*60; t1 = now-i*60
-            cnt = len([p for p in self._packets if t0 <= p[0] < t1])
-            bins.append((fmt_clock(t1), cnt))
+        bins = self._traffic_bins()
         return {"labels":labels, "values":values,
                 "n_direct":n_direct, "n_1hop":n_1hop, "n_multi":n_multi, "n_unknown":n_unknown,
                 "n_rf":n_rf, "n_mqtt":n_mqtt,
@@ -1020,7 +1107,7 @@ class MetricsDataMixin:
     def _data_nodes(self) -> dict:
         now      = time.time()
         cutoff2h = now - 7200
-        n_active = len(set(p[1] for p in self._packets if p[0] >= cutoff2h and p[1]))
+        n_active = len(set(p[1] for p in self._packets_since(cutoff2h) if p[1]))
         batt_real  = {nid: v for nid, v in self._battery.items() if 1 <= v <= 100}
         batt_power = {nid for nid, v in self._battery.items() if v == 101}
         batt_buckets = [0, 0, 0, 0, 0]
@@ -1038,8 +1125,7 @@ class MetricsDataMixin:
         hw_sorted = sorted(hw_counts.items(), key=lambda x: -x[1])
         # FIX: usa _node_pos (coords validadas) em vez de contar POSITION_APP packets
         n_gps_unique = len(self._node_pos)
-        ts_labels = [self._ts_label(t) for t, _ in self._nodes_active_ts]
-        ts_vals   = [v for _, v in self._nodes_active_ts]
+        ts_labels, ts_vals = self._series(self._nodes_active_ts)
         return {
             "n_active": n_active,
             "n_battery": len(batt_real), "n_powered": len(batt_power),
@@ -1291,8 +1377,7 @@ class MetricsDataMixin:
                      if self._rtt_values else None)
 
         local_pos    = self._node_pos.get(self._local_nid) if self._local_nid else None
-        dc_ts_labels = [self._ts_label(t) for t, _ in self._local_dc_ts]
-        dc_ts_vals   = [v for _, v in self._local_dc_ts]
+        dc_ts_labels, dc_ts_vals = self._series(self._local_dc_ts)
 
         # Pacotes do nó local observados na rede (loopback pode filtrar alguns)
         local_tx_pkts = (sum(1 for p in self._packets if p[1] == self._local_nid)

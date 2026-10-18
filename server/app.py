@@ -23,6 +23,7 @@ from flask_socketio import SocketIO, disconnect, join_room, leave_room
 from constants import APP_NAME
 from core.config_defs import MESHTASTIC_CONFIG_DEFS, get_section_label
 from core.metrics import SECTION_KEYS
+from core.metrics_data import use_window
 from core.serialize import safe_utf8_text
 from i18n import (LANGUAGES, get_language, has_lazy, normalize_language, parse_date_style, resolve, tr,
                   use_date_style, use_language)
@@ -334,7 +335,8 @@ def create_app(config: ServerConfig = None) -> tuple:
     def api_metrics_html(section):
         if section not in SECTION_KEYS:
             return jsonify({"error": tr("err_unknown_section", section=section)}), 404
-        html = safe_utf8_text(mesh.metrics_html(section))
+        with use_window(request.args.get("window")):
+            html = safe_utf8_text(mesh.metrics_html(section))
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     @app.get("/api/metrics/<section>/data")
@@ -342,7 +344,8 @@ def create_app(config: ServerConfig = None) -> tuple:
     def api_metrics_data(section):
         if section not in SECTION_KEYS:
             return jsonify({"error": tr("err_unknown_section", section=section)}), 404
-        return jsonify(mesh.metrics_data(section))
+        with use_window(request.args.get("window")):
+            return jsonify(mesh.metrics_data(section))
 
     # Actualização periódica da aba: dados para o gráfico já carregado, ou a
     # indicação de que a secção tem mesmo de ser recarregada.
@@ -351,7 +354,8 @@ def create_app(config: ServerConfig = None) -> tuple:
     def api_metrics_refresh(section):
         if section not in SECTION_KEYS:
             return jsonify({"error": tr("err_unknown_section", section=section)}), 404
-        return jsonify(mesh.metrics_refresh(section))
+        with use_window(request.args.get("window")):
+            return jsonify(mesh.metrics_refresh(section))
 
     @app.get("/api/node/<node_id>/packet")
     @login_required

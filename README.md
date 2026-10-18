@@ -90,7 +90,10 @@ well on a desktop browser.
 
 ### 📊 Metrics (12 sections)
 
-Charts update live, without reloading the page.
+Charts update live, without reloading the page. The server keeps the **last
+24 hours** on disk, one history per local node, so the metrics come back after
+a restart; the charts show **1 h, 6 h or 24 h** (chosen per device). Message
+text is never stored there.
 
 | Section | What it measures |
 |---------|-----------------|
@@ -98,7 +101,7 @@ Charts update live, without reloading the page.
 | 🏠 Local Node | Battery, channel use, duty cycle/h, received SNR, messages, RTT, **radio health (LocalStats)** and **meshtasticd host (HostMetrics)** |
 | 📡 Channel & Airtime | Channel utilisation and hourly duty cycle per node against the EU 10 % limit |
 | 📶 RF Quality | SNR and **RSSI** from radio packets only, per-packet hops, **hop limit exhausted**, SNR × RSSI table with a noise/weak-signal hint |
-| 📦 Traffic | Packets by type and per minute, RF vs MQTT, direct vs relayed |
+| 📦 Traffic | Packets by type and over time, RF vs MQTT, direct vs relayed |
 | 🔋 Nodes & Battery | Battery, voltage, uptime, hardware models, GPS |
 | 🌡 Environment & Power | Temperature, humidity, pressure, air quality and INA power sensors, temperature chart |
 | ✅ Reliability | DM delivery, channel messages confirmed by rebroadcast, duplicates measured by the firmware |
@@ -309,12 +312,13 @@ Settings live in `~/.config/meshdeck/` (or `$XDG_CONFIG_HOME/meshdeck/`):
 | `server.json` | Session key, password hash, bind address, HTTPS settings |
 | `settings.json` | Server language (terminal, logs) and other preferences |
 | `tls/` | Local CA and server certificate (the private keys are readable only by you) |
+| `metrics/` | Metrics history of the last 24 h, one SQLite file per local node (at most 50 MB each; writing pauses when the disk has less than 100 MB free). "🗑 clear metrics" empties it |
 
 The offline map tiles live in `~/.cache/meshdeck/tiles/` (or
 `$XDG_CACHE_HOME/meshdeck/tiles/`) and can be deleted at any time.
 
 The password is never stored in clear text. Per-device choices (sound, node
-list view) stay in each browser.
+list view, metrics chart window) stay in each browser.
 
 ---
 
