@@ -2,20 +2,9 @@
 """
 run_server.py — Arranca o MeshDeckWeb, o servidor web baseado no MeshDeck.
 
-A ligação ao nó Meshtastic vive neste processo; o browser é interface. Por
-omissão liga-se a 127.0.0.1 e não é acessível de fora da máquina; use
---host 0.0.0.0 para abrir à rede local, sabendo que quem entrar pode
-reconfigurar o nó.
-
-Exemplos:
-    python3 run_server.py
-    python3 run_server.py --host 0.0.0.0 --port 8080
-    python3 run_server.py --node-host 192.168.1.50 --connect
-    python3 run_server.py --serial /dev/ttyACM0 --connect
-    python3 run_server.py --set-password
-    python3 run_server.py --make-cert            # HTTPS (porta 8443) com CA local
-    python3 run_server.py --https-port 9443      # mudar a porta HTTPS
-    python3 run_server.py --no-tls               # só HTTP
+A ligação ao nó Meshtastic vive neste processo; o browser é interface. O
+texto do --help (descrição e exemplos) está no i18n, na língua escolhida no
+instalador.
 """
 
 import argparse
@@ -37,32 +26,23 @@ from server.auth import ServerConfig, announce_first_run
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--host", help="endereço de bind (default: o guardado, ou 127.0.0.1)")
-    p.add_argument("--port", type=int, help="porta HTTP (default: a guardada, ou 8080)")
-    p.add_argument("--node-host", default=None,
-                   help="host do meshtasticd a que ligar (default: localhost)")
-    p.add_argument("--node-port", type=int, default=None,
-                   help="porta do meshtasticd (default: 4403)")
-    p.add_argument("--serial", metavar="DEVICE", default=None,
-                   help="ligar por USB serial através da ponte, neste dispositivo")
-    p.add_argument("--connect", action="store_true",
-                   help="ligar ao nó no arranque, sem esperar pelo browser")
-    p.add_argument("--set-password", action="store_true",
-                   help="definir a password de acesso e sair")
-    p.add_argument("--make-cert", nargs="*", metavar="NOME_OU_IP",
-                   help="gerar certificado HTTPS (CA local + servidor) para estes IPs/nomes, "
-                        "além dos IPs desta máquina, activar TLS e sair")
-    p.add_argument("--tls-cert", metavar="FICHEIRO", help="usar este certificado (PEM) e guardar")
-    p.add_argument("--tls-key", metavar="FICHEIRO", help="chave privada do --tls-cert")
-    p.add_argument("--https-port", type=int, metavar="PORTA",
-                   help="porta HTTPS, servida ao lado do HTTP quando há certificado "
-                        "(default: a guardada, ou 8443)")
-    p.add_argument("--tile-cache-mb", type=int, metavar="MB",
-                   help="limite da cache de mosaicos do mapa, para o mapa funcionar "
-                        "sem internet (default: o guardado, ou 200; 0 = não guardar)")
-    p.add_argument("--no-tls", action="store_true", help="desactivar HTTPS (ficar só HTTP) e sair")
-    p.add_argument("--debug", action="store_true", help="logging em DEBUG")
+        description=tr("help_description"),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--host", help=tr("help_host"))
+    p.add_argument("--port", type=int, help=tr("help_port"))
+    p.add_argument("--node-host", default=None, help=tr("help_node_host"))
+    p.add_argument("--node-port", type=int, default=None, help=tr("help_node_port"))
+    p.add_argument("--serial", metavar="DEVICE", default=None, help=tr("help_serial"))
+    p.add_argument("--connect", action="store_true", help=tr("help_connect"))
+    p.add_argument("--set-password", action="store_true", help=tr("help_set_password"))
+    p.add_argument("--make-cert", nargs="*", metavar=tr("NOME_OU_IP"),
+                   help=tr("help_make_cert"))
+    p.add_argument("--tls-cert", metavar=tr("FICHEIRO"), help=tr("help_tls_cert"))
+    p.add_argument("--tls-key", metavar=tr("FICHEIRO"), help=tr("help_tls_key"))
+    p.add_argument("--https-port", type=int, metavar=tr("PORTA"), help=tr("help_https_port"))
+    p.add_argument("--tile-cache-mb", type=int, metavar="MB", help=tr("help_tile_cache_mb"))
+    p.add_argument("--no-tls", action="store_true", help=tr("help_no_tls"))
+    p.add_argument("--debug", action="store_true", help=tr("help_debug"))
     return p.parse_args()
 
 
@@ -123,14 +103,27 @@ def start_https_server(app, host: str, config: ServerConfig):
     return server
 
 
+class HideProductionWarning(logging.Filter):
+    """O Flask-SocketIO avisa "Werkzeug appears to be used in a production
+    deployment" sempre que o stdin não é um terminal (serviço, nohup). O
+    servidor do Werkzeug com threads é a escolha deliberada: rede local,
+    poucos browsers. O aviso só assustava quem lia o log."""
+
+    def filter(self, record):
+        return "production deployment" not in record.getMessage()
+
+
 def quiet_library_logs():
     """O Werkzeug e o engineio registam cada pedido (em polling isso enche o
     log); a biblioteca meshtastic, o pubsub e o urllib3 detalham cada pacote."""
     for name in ("werkzeug", "engineio", "socketio", "meshtastic", "pubsub", "urllib3"):
         logging.getLogger(name).setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").addFilter(HideProductionWarning())
 
 
 def main():
+    # Língua do terminal (e do --help): a escolhida no instalador.
+    set_language(settings().value("language", "en"))
     args = parse_args()
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
@@ -138,8 +131,6 @@ def main():
         datefmt="%H:%M:%S",
     )
     quiet_library_logs()
-    # Língua do terminal: a escolhida no instalador.
-    set_language(settings().value("language", "en"))
 
     config = ServerConfig()
 

@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [2.1.0-beta] — 2026-10-18
+
 ### Added
 
 - **🧪 Browser tests** under `tests/ui/`: a headless Chromium drives the real
@@ -58,8 +62,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   format. Node list, messages, map and the metric charts all agree; before,
   the metrics always used 24 h and day/month.
 - **🖥 Terminal messages in the installer's language**: `--make-cert` (with
-  the steps to install the CA), `--set-password`, `--no-tls` and the
-  connection and shutdown messages were Portuguese only.
+  the steps to install the CA), `--set-password`, `--no-tls`, the
+  connection and shutdown messages and the whole `run_server.py --help`
+  were Portuguese only.
+- **🔇 Quieter start:** the "Werkzeug appears to be used in a production
+  deployment" warning is no longer printed. It appeared whenever the server
+  ran without a terminal (service, `nohup`); the built-in server is the
+  deliberate choice for a local network with a few browsers.
 - **🧹 Code cleanup:** leftovers from the PyQt5 desktop application removed
   — unused colour constants, Qt-compatibility aliases, unused methods and
   events, comments that described the old application — and the logging
@@ -556,6 +565,7 @@ First public release.
 > (ClockworkPi uConsole CM4) with a live Meshtastic network. Expect occasional
 > rough edges; bug reports and pull requests are welcome.
 
+[2.1.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.1.0-beta
 [2.0.0-beta]: https://github.com/tiuksferve/MeshDeckWeb/releases/tag/2.0.0-beta
 [1.0.5-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.5-beta
 [1.0.4-beta]: https://github.com/tiuksferve/MeshDeck/releases/tag/v1.0.4-beta

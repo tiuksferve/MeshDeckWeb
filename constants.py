@@ -4,7 +4,7 @@ usados pelo núcleo e pelo servidor.
 """
 import logging
 
-APP_VERSION = "2.0.0-beta"
+APP_VERSION = "2.1.0-beta"
 APP_NAME    = "MeshDeck"
 from meshtastic import BROADCAST_NUM
 
