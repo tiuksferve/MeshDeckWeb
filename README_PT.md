@@ -10,7 +10,7 @@ USB Serial directo) e serve a interface. Desenvolvido e optimizado para o
 com Python 3; a interface foi pensada primeiro para o iPhone e funciona
 igualmente bem num browser de computador.
 
-**Versão:** 2.2.0-beta &nbsp;·&nbsp; **Callsign:** CT7BRA &nbsp;·&nbsp; **Ano:** 2026
+**Versão:** 2.3.0-beta &nbsp;·&nbsp; **Callsign:** CT7BRA &nbsp;·&nbsp; **Ano:** 2026
 
 > O MeshDeckWeb é o sucessor web do [MeshDeck](https://github.com/tiuksferve/MeshDeck),
 > a aplicação desktop em PyQt5 (1.x). A lógica do nó, a escrita da
