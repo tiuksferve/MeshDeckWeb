@@ -371,7 +371,6 @@ _STRINGS: dict = {
     "Log debug via serial":         {"pt": "Log debug via serial",           "en": "Debug log via serial"},
 
     "📍 Posição enviada ({lat}, {lon}).": {"pt": "📍 Posição enviada ({lat}, {lon}).", "en": "📍 Position sent ({lat}, {lon})."},
-    "📍 Posição enviada para a rede (via firmware).": {"pt": "📍 Posição enviada para a rede (via firmware).", "en": "📍 Position sent to the network (via firmware)."},
     "pos_no_coords_msg":            {"pt": "O nó local não tem posição disponível.\n\nVerifique se:\n  • O GPS está activo e já adquiriu sinal, ou\n  • Está definida uma posição fixa em Configurações → Posição/GPS\n    (campos Latitude fixa / Longitude fixa).", "en": "The local node has no position available.\n\nCheck:\n  • GPS is active and has acquired a signal, or\n  • A fixed position is set in Settings → Position/GPS\n    (Fixed Latitude / Fixed Longitude fields)."},
     "Não conectado.":               {"pt": "Não conectado.",                  "en": "Not connected."},
     # ── Erros do worker (error_occurred.emit) ─────────────────────────────────
@@ -480,10 +479,69 @@ _STRINGS: dict = {
                                      "en": "📡 Traceroute: {origin} → {dest}  ({n} links)"},
 
     # ── Métricas — geral ─────────────────────────────────────────────────────
-    "Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?":
-                                    {"pt": "Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?",
-                                     "en": "Clear all metrics data, including the saved history of the last 24 h?"},
-    "Janela dos gráficos":          {"pt": "Janela dos gráficos",               "en": "Chart window"},
+    "Limpar todos os dados de métricas, incluindo o histórico guardado dos últimos 7 dias?":
+                                    {"pt": "Limpar todos os dados de métricas, incluindo o histórico guardado dos últimos 7 dias?",
+                                     "en": "Clear all metrics data, including the saved history of the last 7 days?"},
+    "Janela dos gráficos":
+                                    {"pt": "Janela dos gráficos",
+                                     "en": "Chart window"},
+    "Esta secção mostra valores acumulados, sem janela de tempo":
+                                    {"pt": "Esta secção mostra valores acumulados, sem janela de tempo",
+                                     "en": "This section shows running totals, with no time window"},
+    "🕓 Histórico":
+                                    {"pt": "🕓 Histórico",
+                                     "en": "🕓 History"},
+    "Bateria e disponibilidade na janela escolhida; mapa de calor dos últimos {n} dias":
+                                    {"pt": "Bateria e disponibilidade na janela escolhida; mapa de calor dos últimos {n} dias",
+                                     "en": "Battery and availability in the chosen window; heat map of the last {n} days"},
+    "Nós ouvidos":
+                                    {"pt": "Nós ouvidos",
+                                     "en": "Nodes heard"},
+    "na janela":
+                                    {"pt": "na janela",
+                                     "en": "in the window"},
+    "Disponibilidade média":
+                                    {"pt": "Disponibilidade média",
+                                     "en": "Average availability"},
+    "Hora mais activa":
+                                    {"pt": "Hora mais activa",
+                                     "en": "Busiest hour"},
+    "Curva de bateria":
+                                    {"pt": "Curva de bateria",
+                                     "en": "Battery curve"},
+    "Ainda nenhum nó com duas leituras de bateria nesta janela.":
+                                    {"pt": "Ainda nenhum nó com duas leituras de bateria nesta janela.",
+                                     "en": "No node has two battery readings in this window yet."},
+    "Pacotes por hora":
+                                    {"pt": "Pacotes por hora",
+                                     "en": "Packets per hour"},
+    "Mais escuro = menos pacotes. As horas a tracejado ficam antes do histórico ou ainda estão por vir.":
+                                    {"pt": "Mais escuro = menos pacotes. As horas a tracejado ficam antes do histórico ou ainda estão por vir.",
+                                     "en": "Darker = fewer packets. Dashed hours are before the history starts or still to come."},
+    "Disponibilidade por nó":
+                                    {"pt": "Disponibilidade por nó",
+                                     "en": "Availability per node"},
+    "Ouvido ao longo da janela":
+                                    {"pt": "Ouvido ao longo da janela",
+                                     "en": "Heard across the window"},
+    "Último":
+                                    {"pt": "Último",
+                                     "en": "Last"},
+    "{n} pacotes/h":
+                                    {"pt": "{n} pacotes/h",
+                                     "en": "{n} packets/h"},
+    "mais calma: {h} ({n} pacotes/h)":
+                                    {"pt": "mais calma: {h} ({n} pacotes/h)",
+                                     "en": "quietest: {h} ({n} packets/h)"},
+    "{n} nós":
+                                    {"pt": "{n} nós",
+                                     "en": "{n} nodes"},
+    "Cada célula = {step}; verde se o nó foi ouvido nesse intervalo.":
+                                    {"pt": "Cada célula = {step}; verde se o nó foi ouvido nesse intervalo.",
+                                     "en": "Each cell = {step}; green if the node was heard in that interval."},
+    "+ {n} nós com menos disponibilidade não mostrados":
+                                    {"pt": "+ {n} nós com menos disponibilidade não mostrados",
+                                     "en": "+ {n} less available nodes not shown"},
     "📊 Visão Geral":               {"pt": "📊 Visão Geral",                    "en": "📊 Overview"},
     "📡 Canal & Airtime":           {"pt": "📡 Canal & Airtime",                "en": "📡 Channel & Airtime"},
     "📶 Qualidade RF":              {"pt": "📶 Qualidade RF",                   "en": "📶 RF Quality"},
@@ -1018,6 +1076,11 @@ _STRINGS: dict = {
     "autenticação necessária": {"pt": "autenticação necessária", "en": "authentication required"},
     "a password tem de ter pelo menos 8 caracteres": {"pt": "a password tem de ter pelo menos 8 caracteres", "en": "the password must have at least 8 characters"},
     "Som de mensagens": {"pt": "Som de mensagens", "en": "Message sound"},
+    "📍 Enviar a minha posição": {"pt": "📍 Enviar a minha posição", "en": "📍 Send my position"},
+    "🗑 Limpar NodeDB do nó": {"pt": "🗑 Limpar NodeDB do nó", "en": "🗑 Clear the node's NodeDB"},
+    "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.": {"pt": "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.", "en": "Clear the node's NodeDB? The node list stored on the node is erased and fills up again as nodes are heard. Favourite nodes are kept."},
+    "🗑 NodeDB do nó limpa.": {"pt": "🗑 NodeDB do nó limpa.", "en": "🗑 The node's NodeDB was cleared."},
+    "Disponível com o nó ligado": {"pt": "Disponível com o nó ligado", "en": "Available once the node is connected"},
     "🔔 Ligado": {"pt": "🔔 Ligado", "en": "🔔 On"},
     "🔕 Desligado": {"pt": "🔕 Desligado", "en": "🔕 Off"},
     "Selecciona um nó com GPS na lista.": {"pt": "Selecciona um nó com GPS na lista.", "en": "Select a node with GPS in the list."},

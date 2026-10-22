@@ -88,12 +88,13 @@ igualmente bem num browser de computador.
   em Base64, Base64 URL-safe, com prefixo `base64:` ou em hex
 - Dono (nome longo/curto, licenciado)
 
-### 📊 Métricas (12 secções)
+### 📊 Métricas (13 secções)
 
 Os gráficos actualizam-se em tempo real, sem recarregar a página. O servidor
-guarda as **últimas 24 horas** em disco, um histórico por nó local, por isso
-as métricas voltam depois de reiniciar; os gráficos mostram **1 h, 6 h ou
-24 h** (escolha de cada dispositivo). O texto das mensagens nunca fica lá.
+guarda os **últimos 7 dias** em disco, um histórico por nó local, por isso
+as métricas voltam depois de reiniciar; os gráficos mostram **1 h, 6 h, 24 h
+ou 7 d** (escolha de cada dispositivo; o selector fica esbatido nas secções
+com valores acumulados). O texto das mensagens nunca fica lá.
 
 | Secção | O que mede |
 |--------|-----------|
@@ -104,6 +105,7 @@ as métricas voltam depois de reiniciar; os gráficos mostram **1 h, 6 h ou
 | 📦 Tráfego | Pacotes por tipo e ao longo do tempo, RF vs MQTT, directos vs retransmitidos |
 | 🔋 Nós & Bateria | Bateria, tensão, uptime, modelos de hardware, GPS |
 | 🌡 Ambiente & Energia | Temperatura, humidade, pressão, qualidade do ar e sensores de energia INA, gráfico de temperatura |
+| 🕓 Histórico | **Curva de bateria** por nó, **disponibilidade por nó** (em que intervalos da janela foi ouvido) e **mapa de calor de pacotes por hora** dos últimos 7 dias |
 | ✅ Fiabilidade | Entrega de DMs, mensagens de canal confirmadas por retransmissão, duplicados medidos pelo firmware |
 | ⏱ Latência | Tempo de ida e volta até ao ACK: média, mediana, P90 |
 | 🔗 Vizinhança | Pares NeighborInfo com SNR |
@@ -316,7 +318,7 @@ As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`
 | `server.json` | Chave de sessão, hash da password, endereço, definições HTTPS |
 | `settings.json` | Idioma do servidor (terminal, logs) e outras preferências |
 | `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
-| `metrics/` | Histórico das métricas das últimas 24 h, um ficheiro SQLite por nó local (no máximo 50 MB cada; a escrita pára com menos de 100 MB livres no disco). "🗑 limpar métricas" esvazia-o |
+| `metrics/` | Histórico das métricas dos últimos 7 dias, um ficheiro SQLite por nó local (no máximo 50 MB cada; a escrita pára com menos de 100 MB livres no disco). "🗑 limpar métricas" esvazia-o |
 
 Os mosaicos do mapa offline ficam em `~/.cache/meshdeck/tiles/` (ou
 `$XDG_CACHE_HOME/meshdeck/tiles/`) e podem ser apagados a qualquer momento.
@@ -356,7 +358,7 @@ python3 -m pytest -m "not ui"     # sem os testes no browser
 Os testes em `tests/ui/` abrem a interface real num Chromium ou Chrome
 headless, com nós, mensagens e métricas simulados e sem internet: login,
 todas as abas em tamanho de computador e de telemóvel, mapa, bússola,
-mensagens, as 12 secções de métricas, configuração do nó e mudança de idioma.
+mensagens, as 13 secções de métricas, configuração do nó e mudança de idioma.
 São saltados se não houver Chromium/Chrome instalado
 (`MESHDECK_BROWSER=/caminho/do/browser` escolhe um). Um teste que falhe deixa
 uma captura em `.pytest_cache/ui-failures/`.

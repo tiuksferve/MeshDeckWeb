@@ -19,17 +19,17 @@ import time
 from bisect import bisect_left
 from contextvars import ContextVar
 from datetime import datetime
-from i18n import fmt_clock, tr
+from i18n import date_style, fmt_clock, tr
 
 logger = logging.getLogger("MeshDeck.metrics")
 
 _CH_TTL_S = 1800   # 30 min sem actualização → expirar valor de ch_util/air_tx
 
-# Séries no tempo e linha temporal dos pacotes: guardam-se 24 h (o mesmo que o
-# histórico em disco, core/metrics_history.py). Os gráficos mostram a janela
-# escolhida na aba (1 h, 6 h ou 24 h), com no máximo CHART_POINTS pontos.
-SERIES_KEEP_S = 24 * 3600
-WINDOWS_S = (3600, 6 * 3600, 24 * 3600)
+# Séries no tempo e linha temporal dos pacotes: guardam-se 7 dias (o mesmo que
+# o histórico em disco, core/metrics_history.py). Os gráficos mostram a janela
+# escolhida na aba (1 h, 6 h, 24 h ou 7 d), com no máximo CHART_POINTS pontos.
+SERIES_KEEP_S = 7 * 24 * 3600
+WINDOWS_S = (3600, 6 * 3600, 24 * 3600, 7 * 24 * 3600)
 DEFAULT_WINDOW_S = 6 * 3600
 CHART_POINTS = 240
 _window = ContextVar("metrics_window", default=DEFAULT_WINDOW_S)
@@ -52,6 +52,22 @@ def use_window(seconds):
 
 def current_window() -> int:
     return _window.get()
+
+
+def window_label(seconds: int) -> str:
+    """6 h, 24 h, 7 d."""
+    return f"{seconds // 3600} h" if seconds <= 24 * 3600 else f"{seconds // 86400} d"
+
+
+def fmt_day(value) -> str:
+    """Dia e mês na ordem do dispositivo, sem o ano: 22/10, 10/22 ou 10-22."""
+    dt = value if isinstance(value, datetime) else datetime.fromtimestamp(value)
+    order = date_style()[1]
+    if order == "ymd":
+        return f"{dt.month:02d}-{dt.day:02d}"
+    if order == "mdy":
+        return f"{dt.month:02d}/{dt.day:02d}"
+    return f"{dt.day:02d}/{dt.month:02d}"
 
 
 def trim_series(series: list, now: float, keep_s: float = SERIES_KEEP_S):
@@ -273,6 +289,9 @@ class MetricsDataMixin:
         self._env_temp_ts: dict = {}   # {nid: [(ts, °C)]} para o gráfico
         self._power: dict  = {}    # {nid: {'ts': float, 'channels': {n: [V, mA]}}}
 
+        # Bateria por nó ao longo do tempo, para a secção Histórico.
+        self._battery_ts: dict = {}    # {nid: [(ts, %)]}
+
     # ── helpers TTL ──────────────────────────────────────────────────────
     def _ch_val(self, nid: str) -> float:
         e = self._ch_util.get(nid)
@@ -339,6 +358,8 @@ class MetricsDataMixin:
             if val is not None and val != '':   # hw_model vazio = ainda desconhecido
                 if field == 'voltage': val = round(float(val), 3)
                 getattr(self, target)[nid] = val
+        if node_data.get('battery_level') is not None:
+            self._record_battery(nid, node_data['battery_level'], ts)
 
         # Telemetria com TTL
         ch_util = node_data.get('channel_utilization')
@@ -493,7 +514,9 @@ class MetricsDataMixin:
                 volt    = dm.get('voltage')
                 uptm    = dm.get('uptimeSeconds')
 
-                if batt    is not None: self._battery[nid] = int(batt)
+                if batt    is not None:
+                    self._battery[nid] = int(batt)
+                    self._record_battery(nid, batt, ts)
                 if volt    is not None: self._voltage[nid] = round(float(volt), 3)
                 if uptm    is not None: self._uptime[nid]  = int(uptm)
                 if ch_util is not None: self._ch_util[nid] = {'val': float(ch_util), 'ts': ts}
@@ -584,6 +607,26 @@ class MetricsDataMixin:
             active = len(set(p[1] for p in self._packets_since(ts - 7200)))
             self._nodes_active_ts.append((ts, active))
             trim_series(self._nodes_active_ts, ts)
+
+    # Um ponto novo só quando o valor muda ou passou BATTERY_KEEPALIVE_S: os
+    # nós repetem a mesma percentagem muitas vezes (NodeDB e telemetria).
+    BATTERY_KEEPALIVE_S = 1800
+
+    def _record_battery(self, nid: str, value, ts: float):
+        """Ponto da curva de bateria; fora 0 (desconhecido) e 101 (alimentado)."""
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return
+        if not nid or not 1 <= value <= 100:
+            return
+        series = self._battery_ts.setdefault(nid, [])
+        if series:
+            last_ts, last_val = series[-1]
+            if ts < last_ts or (value == last_val and ts - last_ts < self.BATTERY_KEEPALIVE_S):
+                return
+        series.append((ts, value))
+        trim_series(series, ts)
 
     @staticmethod
     def _numbers(raw: dict, fields) -> dict:
@@ -844,6 +887,9 @@ class MetricsDataMixin:
 
     # ── helpers ──────────────────────────────────────────────────────────
     def _ts_label(self, ts: float) -> str:
+        """Hora; com a data à frente quando a janela passa de um dia."""
+        if current_window() > 24 * 3600:
+            return f"{fmt_day(ts)} {fmt_clock(ts)}"
         return fmt_clock(ts)
 
     def _packets_since(self, cutoff: float) -> list:
@@ -858,14 +904,14 @@ class MetricsDataMixin:
 
     def _traffic_title(self) -> str:
         window = current_window()
-        step = {3600: "1 min", 6 * 3600: "5 min"}.get(window, "15 min")
-        return tr("Pacotes por {step}, janela de {window}", step=step, window=f"{window // 3600} h")
+        step = {3600: "1 min", 6 * 3600: "5 min", 24 * 3600: "15 min"}.get(window, "2 h")
+        return tr("Pacotes por {step}, janela de {window}", step=step, window=window_label(window))
 
     def _traffic_bins(self) -> list:
         """Pacotes por intervalo na janela escolhida: 60 intervalos de 1 min
-        em 1 h, 72 de 5 min em 6 h, 96 de 15 min em 24 h."""
+        em 1 h, 72 de 5 min em 6 h, 96 de 15 min em 24 h, 84 de 2 h em 7 d."""
         window = current_window()
-        count = {3600: 60, 6 * 3600: 72}.get(window, 96)
+        count = {3600: 60, 6 * 3600: 72, 24 * 3600: 96}.get(window, 84)
         step = window / count
         now = time.time()
         bins = [0] * count
@@ -873,7 +919,7 @@ class MetricsDataMixin:
             idx = int((p[0] - (now - window)) // step)
             if 0 <= idx < count:
                 bins[idx] += 1
-        return [(fmt_clock(now - window + (i + 1) * step), n) for i, n in enumerate(bins)]
+        return [(self._ts_label(now - window + (i + 1) * step), n) for i, n in enumerate(bins)]
 
     def _now_str(self) -> str:
         return fmt_clock(datetime.now(), seconds=True)
@@ -1349,6 +1395,87 @@ class MetricsDataMixin:
         return {"rows": rows, "now": self._now_str(),
                 "lbl_freq": {"high": tr("Alta frequência"), "frequent": tr("Frequente"),
                              "normal": "Normal"}}
+
+    # Disponibilidade: a janela dividida em intervalos iguais (5 min em 1 h,
+    # 15 min em 6 h, 30 min em 24 h, 2 h em 7 d); conta-se em quantos o nó
+    # foi ouvido. Mapa de calor: pacotes por hora nos últimos HEAT_DAYS dias.
+    AVAILABILITY_BINS = {3600: 12, 6 * 3600: 24, 24 * 3600: 48, 7 * 24 * 3600: 84}
+    AVAILABILITY_MAX_ROWS = 300
+    BATTERY_MAX_SERIES = 6
+    HEAT_DAYS = 7
+
+    def _data_history(self) -> dict:
+        now = time.time()
+        window = current_window()
+        start = now - window
+        packets = self._packets_since(start)
+
+        # Curva de bateria: o nó local primeiro, depois os de mais pontos.
+        series = [(nid, downsample(pts, start, now)) for nid, pts in self._battery_ts.items()]
+        series = [x for x in series if len(x[1]) >= 2]
+        series.sort(key=lambda x: (x[0] != self._local_nid, -len(x[1])))
+        battery = [{"name": self._name(nid), "points": [{"x": round(t * 1000), "y": v} for t, v in pts]}
+                   for nid, pts in series[:self.BATTERY_MAX_SERIES]]
+
+        # Disponibilidade por nó (o nó local fica de fora: ouve-se sempre).
+        count = self.AVAILABILITY_BINS.get(window, 48)
+        step = window / count
+        heard: dict = {}
+        for p in packets:
+            nid = p[1]
+            if nid and nid != self._local_nid:
+                idx = min(int((p[0] - start) // step), count - 1)
+                heard.setdefault(nid, [set(), 0, p[0]])
+                entry = heard[nid]
+                entry[0].add(idx)
+                entry[1] += 1
+                entry[2] = p[0]
+        rows = [[nid, self._name(nid), round(len(bins) * 100 / count),
+                 "".join("1" if i in bins else "0" for i in range(count)), n, self._ts_label(last)]
+                for nid, (bins, n, last) in heard.items()]
+        rows.sort(key=lambda r: (-r[2], -r[4], r[1].lower()))
+        avail_avg = round(sum(r[2] for r in rows) / len(rows)) if rows else None
+
+        # Mapa de calor: uma linha por dia (de hoje para trás), 24 horas.
+        today = datetime.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0)
+        days = [datetime.fromordinal(today.toordinal() - k) for k in range(self.HEAT_DAYS)]
+        first = self._packets[0][0] if self._packets else now
+        heat, heat_days = [], []
+        hour_totals, hour_days = [0] * 24, [0] * 24
+        for day in days:
+            hours = [datetime(day.year, day.month, day.day, h).timestamp() for h in range(24)]
+            ends = hours[1:] + [datetime.fromordinal(day.toordinal() + 1).timestamp()]
+            row = []
+            for h, (a, b) in enumerate(zip(hours, ends)):
+                if b <= first or a > now:
+                    row.append(None)          # antes do histórico ou ainda por vir
+                    continue
+                lo = bisect_left(self._packets, (a,))
+                n = bisect_left(self._packets, (b,), lo) - lo
+                row.append(n)
+                if a >= first and b <= now:   # só horas completas na média
+                    hour_totals[h] += n
+                    hour_days[h] += 1
+            heat.append(row)
+            heat_days.append(round(day.timestamp() * 1000))
+        hour_avg = [t / d if d else None for t, d in zip(hour_totals, hour_days)]
+        busiest = max((h for h in range(24) if hour_avg[h] is not None),
+                      key=lambda h: hour_avg[h], default=None)
+        quietest = min((h for h in range(24) if hour_avg[h] is not None),
+                       key=lambda h: hour_avg[h], default=None)
+        return {
+            "window_ms": window * 1000,
+            "battery": battery,
+            "n_heard": len(rows), "avail_avg": avail_avg, "avail_bins": count,
+            "avail_step": window_label(int(step)) if step >= 3600 else f"{int(step // 60)} min",
+            "avail_rows": rows[:self.AVAILABILITY_MAX_ROWS],
+            "avail_more": max(len(rows) - self.AVAILABILITY_MAX_ROWS, 0),
+            "heat": heat, "heat_days": heat_days,
+            "heat_max": max((n for row in heat for n in row if n), default=0),
+            "busiest": None if busiest is None else [busiest, round(hour_avg[busiest])],
+            "quietest": None if quietest is None else [quietest, round(hour_avg[quietest])],
+            "now": self._now_str(),
+        }
 
     def _data_local_node(self) -> dict:
         """Dados da secção dedicada ao nó local."""

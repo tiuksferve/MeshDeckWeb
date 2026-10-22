@@ -1,7 +1,8 @@
 """
 Testes do histórico das métricas (core/metrics_history.py e a ligação na
-sessão): o que se grava, a reposição depois de reiniciar, a retenção de 24 h,
-as protecções de disco e a janela dos gráficos (1 h / 6 h / 24 h).
+sessão): o que se grava, a reposição depois de reiniciar, a retenção de 7 dias,
+as protecções de disco, a janela dos gráficos (1 h / 6 h / 24 h / 7 d) e a
+secção Histórico.
 """
 
 import json
@@ -9,7 +10,7 @@ import time
 
 from core import metrics_history as mh
 from core.metrics import SECTION_KEYS, MeshMetrics
-from core.metrics_data import downsample, trim_series, use_window
+from core.metrics_data import downsample, trim_series, use_window, window_label
 from core.settings import Settings
 from server.app import create_app
 from server.auth import ServerConfig
@@ -85,11 +86,11 @@ def test_distilled_packets_give_the_same_metrics_as_the_originals():
 
 # ── ficheiro ───────────────────────────────────────────────────────────────
 
-def test_history_keeps_order_and_only_the_last_24_hours(tmp_path):
+def test_history_keeps_order_and_only_the_last_7_days(tmp_path):
     now = [1_000_000.0]
     history = mh.MetricsHistory(str(tmp_path), "!a1b2c3d4", clock=lambda: now[0])
     assert history.path.endswith("a1b2c3d4.sqlite")
-    history.record(mh.SENT, now[0] - 90_000, {"id": 1, "kind": "dm"})     # mais de 24 h
+    history.record(mh.SENT, now[0] - 8 * 86400, {"id": 1, "kind": "dm"})  # mais de 7 dias
     history.record(mh.SENT, now[0] - 10, {"id": 2, "kind": "dm"})
     history.record(mh.STATUS, now[0] - 5, {"id": 2, "status": "ack"})
     history.flush()
@@ -209,30 +210,88 @@ def test_traffic_bins_follow_the_chosen_window():
     for i in reversed(range(100)):           # por ordem de chegada, de 10 em 10 min
         m.ingest_raw_packet(packet("POSITION_APP", PEER, id=i), now - i * 600)
     sizes = {}
-    for window in (3600, 21600, 86400):
+    for window in (3600, 21600, 86400, 604800):
         with use_window(window):
             data = m.data_for("traffic")
         sizes[window] = (len(data["ppm_vals"]), sum(data["ppm_vals"]))
     assert sizes[3600] == (60, 6)
     assert sizes[21600] == (72, 36)
     assert sizes[86400] == (96, 100)
+    assert sizes[604800] == (84, 100)
+    assert [window_label(w) for w in (3600, 86400, 604800)] == ["1 h", "24 h", "7 d"]
     with use_window("99"):                   # valor desconhecido: a janela por omissão
         assert len(m.data_for("traffic")["ppm_vals"]) == 72
 
 
-def test_series_are_kept_for_24_hours_and_shown_per_window():
+def test_series_are_kept_for_7_days_and_shown_per_window():
     m = MeshMetrics()
     now = time.time()
-    start = now - 30 * 3600
-    for i in range(30 * 60):                 # 30 h, um pacote por minuto
-        m.ingest_raw_packet(packet("POSITION_APP", PEER + i % 3, id=i), start + i * 60)
-    assert m._packets[0][0] >= now - 24 * 3600 - 60
+    start = now - 8 * 86400
+    for i in range(8 * 24 * 12):             # 8 dias, um pacote a cada 5 min
+        m.ingest_raw_packet(packet("POSITION_APP", PEER + i % 3, id=i), start + i * 300)
+    assert now - 7 * 86400 - 300 <= m._packets[0][0] <= now - 7 * 86400 + 300
     with use_window(3600):
         short = m.data_for("nodes")["ts_vals"]
     with use_window(86400):
         long = m.data_for("nodes")["ts_vals"]
-    assert 50 <= len(short) <= 61
-    assert len(long) <= 240 < 24 * 60
+    assert 11 <= len(short) <= 13
+    assert len(long) <= 240 < 24 * 12
+    with use_window(604800):
+        labels = m.data_for("nodes")["ts_labels"]
+    assert len(labels) <= 240 and "/" in labels[0]    # na janela de 7 d, com a data
+
+
+# ── secção Histórico ───────────────────────────────────────────────────────
+
+def battery(level: int, num: int = PEER, **extra) -> dict:
+    return packet("TELEMETRY_APP", num, decoded={"telemetry": {"deviceMetrics": {"batteryLevel": level}}},
+                  **extra)
+
+
+def test_battery_curve_keeps_changes_and_skips_repeats():
+    m = MeshMetrics()
+    now = time.time()
+    for i, level in enumerate([90, 90, 90, 89, 101, 0, 88]):
+        m.ingest_raw_packet(battery(level, id=i), now - 3000 + i * 60)
+    m.ingest_raw_packet(battery(88, id=99), now - 3000 + 6 * 60 + m.BATTERY_KEEPALIVE_S)
+    # 101 (alimentado) e 0 (desconhecido) não são pontos da curva.
+    assert [v for _t, v in m._battery_ts["!11110001"]] == [90, 89, 88, 88]
+    m.ingest_packet(None, {"battery_level": 70}, "!11110002", now - 60)
+    m.ingest_packet(None, {"battery_level": 71}, "!11110002", now)
+    curve = {s["name"]: [p["y"] for p in s["points"]] for s in m.data_for("history")["battery"]}
+    assert curve["!11110002"] == [70, 71]
+
+
+def test_availability_counts_the_intervals_each_node_was_heard():
+    m = MeshMetrics()
+    m.set_local_node_id(LOCAL_ID)
+    now = time.time()
+    for i in range(12):                      # 1 h, um pacote a cada 5 min
+        m.ingest_raw_packet(packet("POSITION_APP", PEER, id=i), now - 3590 + i * 300)
+    m.ingest_raw_packet(packet("POSITION_APP", PEER + 1, id=50), now - 100)
+    m.ingest_raw_packet(packet("POSITION_APP", int(LOCAL_ID[1:], 16), id=51), now - 50)
+    with use_window(3600):
+        d = m.data_for("history")
+    rows = {r[0]: r for r in d["avail_rows"]}
+    assert set(rows) == {"!11110001", "!11110002"}       # o nó local fica de fora
+    assert rows["!11110001"][2] == 100 and rows["!11110001"][3] == "1" * 12
+    assert rows["!11110002"][2] == 8 and rows["!11110002"][3].count("1") == 1
+    assert d["avail_rows"][0][0] == "!11110001" and d["avail_step"] == "5 min"
+    with use_window(604800):
+        assert m.data_for("history")["avail_step"] == "2 h"
+
+
+def test_heat_map_counts_packets_per_hour_of_each_day():
+    m = MeshMetrics()
+    now = time.time()
+    for i in range(30):
+        m.ingest_raw_packet(packet("POSITION_APP", PEER, id=i), now - 2 * 86400 + i)
+    d = m.data_for("history")
+    assert len(d["heat"]) == m.HEAT_DAYS and all(len(row) == 24 for row in d["heat"])
+    assert sum(n for row in d["heat"] for n in row if n) == 30 == d["heat_max"]
+    assert d["heat"][-1] == [None] * 24      # antes do primeiro pacote
+    assert d["busiest"] is not None
+    assert "_metricsUpdateData" in m.html_for("history")
 
 
 def test_trim_and_downsample_helpers():

@@ -32,6 +32,23 @@ def test_logout_returns_to_login(page):
     page.wait_for("!document.getElementById('login').hidden", message="o logout não voltou ao login")
 
 
+def test_menu_node_actions_reach_the_server(page):
+    page.click("#menu-btn")
+    assert not page.js("document.getElementById('btn-send-position').disabled"), \
+        "com o nó ligado, enviar posição tem de estar disponível"
+    # Limpar a NodeDB pede confirmação; recusada, não se envia nada.
+    page.js("window._asked = 0; window.confirm = () => { window._asked++; return false; }")
+    page.click("#btn-reset-nodedb")
+    assert page.js("window._asked") == 1
+    assert page.js("document.getElementById('menu').hidden")
+    # O servidor de teste não tem worker: o comando chega e volta como aviso.
+    page.click("#menu-btn")
+    page.click("#btn-send-position")
+    page.wait_for("document.querySelector('#toasts .toast')",
+                  message="enviar posição não deu nenhum aviso")
+    page.js("document.querySelectorAll('#toasts .toast').forEach((e) => e.remove())")
+
+
 VISIBLE_NODES = ("[...document.querySelectorAll('#panel-nodes [data-id]')]"
                  ".filter((e) => e.offsetParent !== null).map((e) => e.dataset.id)")
 

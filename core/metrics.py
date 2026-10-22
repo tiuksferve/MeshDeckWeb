@@ -3,7 +3,7 @@ core/metrics.py — Métricas da rede, livres de interface.
 
 MetricsDataMixin (core/metrics_data.py) agrega os pacotes; MetricsRenderMixin
 (core/metrics_render.py) devolve o HTML de cada secção, com Chart.js. A
-MeshMetrics junta os dois, define os limites do canal e despacha as 12
+MeshMetrics junta os dois, define os limites do canal e despacha as 13
 secções que o servidor serve ao browser.
 """
 
@@ -21,6 +21,7 @@ SECTIONS = (
     ("traffic",     "📦 Tráfego"),
     ("nodes",       "🔋 Nós & Bateria"),
     ("environment", "🌡 Ambiente & Energia"),
+    ("history",     "🕓 Histórico"),
     ("reliability", "✅ Fiabilidade"),
     ("latency",     "⏱ Latência"),
     ("neighbors",   "🔗 Vizinhança"),
@@ -33,7 +34,12 @@ SECTION_KEYS = tuple(key for key, _label in SECTIONS)
 # Secções que mostram ecrã de espera enquanto não há dados suficientes.
 # local_node fica de fora: é gerido pelo hash guard da aba.
 WAITING_SECTIONS = frozenset(
-    {"intervals", "neighbors", "range_links", "rf", "channel", "nodes", "environment"})
+    {"intervals", "neighbors", "range_links", "rf", "channel", "nodes", "environment", "history"})
+
+# Secções com gráficos no tempo, que seguem a janela escolhida na aba. Nas
+# outras os valores são acumulados e o selector fica desactivado.
+WINDOWED_SECTIONS = frozenset(
+    {"local_node", "channel", "traffic", "nodes", "environment", "history"})
 
 # Campos do nó local cuja mudança obriga a redesenhar a secção: a página
 # local_node não tem actualização incremental, por isso só se recarrega
@@ -119,6 +125,8 @@ class MeshMetrics(MetricsDataMixin, MetricsRenderMixin):
             return bool(self._battery or self._packets)
         if key == "environment":
             return bool(self._env or self._power)
+        if key == "history":
+            return bool(self._packets)
         return True
 
     def clear(self):

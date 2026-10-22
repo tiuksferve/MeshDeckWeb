@@ -467,31 +467,23 @@ def test_send_node_info_broadcasts_a_user_packet(wired):
     assert iface.localNode.admin_messages == []
 
 
-def test_send_position_prefers_the_firmware_api(wired):
+def test_send_position_broadcasts_the_known_position(wired):
+    """Um pacote POSITION_APP em broadcast, sem mexer na configuração do nó."""
     worker, iface, rec = wired
     worker._connected = True
     worker.send_position()
-    ok, _msg = rec.wait("position_sent")[0]
-    assert ok is True
-    assert len(iface.localNode.set_position_calls) == 1
-
-
-def test_send_position_falls_back_to_manual_packet(wired):
-    worker, iface, rec = wired
-    worker._connected = True
-    iface.localNode.raise_on_set_position = TypeError("lib antiga")
-    worker.send_position()
-    ok, _msg = rec.wait("position_sent")[0]
-    assert ok is True
-    pos = iface.sent_data[0]["payload"]
-    assert pos.latitude_i == 385000000
-    assert pos.longitude_i == -91000000
+    ok, msg = rec.wait("position_sent")[0]
+    assert ok is True and "38.500000" in msg
+    sent = iface.sent_data[0]
+    assert sent["destinationId"] == 0xFFFFFFFF
+    assert sent["payload"].latitude_i == 385000000
+    assert sent["payload"].longitude_i == -91000000
+    assert iface.localNode.admin_messages == []
 
 
 def test_send_position_reports_failure_without_coordinates(wired):
     worker, iface, rec = wired
     worker._connected = True
-    iface.localNode.raise_on_set_position = TypeError("lib antiga")
     iface.nodesByNum[LOCAL_NUM]["position"] = {}
     iface.localNode.localConfig.position.fixed_lat = 0.0
     iface.localNode.localConfig.position.fixed_lon = 0.0

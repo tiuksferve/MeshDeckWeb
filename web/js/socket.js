@@ -49,7 +49,7 @@ export function connectSocket(onToast) {
   socket.on('packet_stats', (payload) => store.applyPacketStats(payload));
   socket.on('node_ready', (payload) => store.applyNodeReady(payload));
   socket.on('config_lock', (payload) => store.applyConfigLock(payload));
-  socket.on('position_sent', (payload) => { if (!payload.success) onToast?.(payload.message); });
+  socket.on('position_sent', (payload) => onToast?.(payload.message, payload.success ? 'info' : ''));
   socket.on('error', (payload) => onToast?.(payload.message));
   socket.on('log', (payload) => store.emit('log-line', payload.line));
 

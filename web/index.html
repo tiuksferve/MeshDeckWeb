@@ -70,7 +70,7 @@
     <span class="spacer"></span>
     <span id="packet-stats" class="muted mono"></span>
     <input id="search" type="search" placeholder="🔎 procurar nó…" data-i18n-placeholder="🔎 procurar nó…" class="search">
-    <!-- Idioma, consola e sair: usados raramente, ficam num só menu. -->
+    <!-- Idioma, som, acções do nó, consola e sair: usados raramente, ficam num só menu. -->
     <div class="menu-wrap">
       <button type="button" id="menu-btn" class="menu-btn" aria-haspopup="menu" aria-expanded="false"
               title="Menu" data-i18n-title="Menu">☰</button>
@@ -85,6 +85,12 @@
           <button type="button" data-sound="on" data-i18n="🔔 Ligado">🔔 Ligado</button>
           <button type="button" data-sound="off" data-i18n="🔕 Desligado">🔕 Desligado</button>
         </div>
+        <div class="menu-label" data-i18n="Nó">Nó</div>
+        <button type="button" id="btn-send-position" class="menu-item" role="menuitem" disabled
+                data-i18n="📍 Enviar a minha posição">📍 Enviar a minha posição</button>
+        <button type="button" id="btn-reset-nodedb" class="menu-item danger" role="menuitem" disabled
+                data-i18n="🗑 Limpar NodeDB do nó">🗑 Limpar NodeDB do nó</button>
+        <hr>
         <button type="button" id="btn-console" class="menu-item" role="menuitem" data-i18n="🖥 Consola do servidor">🖥 Consola do servidor</button>
         <hr>
         <button type="button" id="logout" class="menu-item danger" role="menuitem">⏻ <span data-i18n="Sair">Sair</span></button>
@@ -224,6 +230,7 @@
             <button type="button" data-window="3600">1 h</button>
             <button type="button" data-window="21600">6 h</button>
             <button type="button" data-window="86400">24 h</button>
+            <button type="button" data-window="604800">7 d</button>
           </div>
           <ul id="metrics-list" class="plain-list"></ul>
           <button id="metrics-clear" class="ghost small" data-i18n="🗑 limpar métricas">🗑 limpar métricas</button>

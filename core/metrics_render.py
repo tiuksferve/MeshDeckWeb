@@ -1128,6 +1128,130 @@ window._metricsUpdateData=function(d){{
 </script>"""
         return self._base_html(tr("🌡 Ambiente & Energia"), body)
 
+    def _html_history(self) -> str:
+        d = self._data_history()
+        if not d["heat_max"] and not d["n_heard"]:
+            body = f'<div class="no-data">{tr("⏳ Aguardando pacotes...")}</div>'
+            return self._base_html(tr("🕓 Histórico"), body)
+
+        data_json = json.dumps(d).replace("</", "<\\/")   # dentro de <script>
+        body = f"""
+<style>
+  .heat {{ display: grid; grid-template-columns: 48px repeat(24, 1fr); gap: 2px; font-size: 10px; color: #8b949e; }}
+  .heat div {{ height: 18px; border-radius: 2px; }}
+  .heat .lbl {{ height: auto; white-space: nowrap; overflow: hidden; }}
+  .heat .hr {{ height: auto; text-align: center; }}
+  .heat .none {{ border: 1px dashed #21262d; }}
+  .strip {{ display: flex; gap: 1px; min-width: 120px; height: 12px; }}
+  .strip span {{ flex: 1; border-radius: 1px; background: #21262d; }}
+  .strip span.on {{ background: #39d353; }}
+  td.pct {{ text-align: right; white-space: nowrap; }}
+  td.wide {{ width: 55%; }}
+  @media (max-width: 600px) {{ .heat {{ grid-template-columns: 40px repeat(24, 1fr); gap: 1px; }} .heat div {{ height: 14px; }} }}
+</style>
+<div class="subtitle">{tr("Bateria e disponibilidade na janela escolhida; mapa de calor dos últimos {n} dias", n=self.HEAT_DAYS)}</div>
+<div class="grid-3">
+  <div class="card"><h3>{tr("Nós ouvidos")}</h3><div id="h-heard" class="kpi blue"></div><div class="kpi-sub">{tr("na janela")}</div></div>
+  <div class="card"><h3>{tr("Disponibilidade média")}</h3><div id="h-avail" class="kpi green"></div><div id="h-avail-sub" class="kpi-sub"></div></div>
+  <div class="card"><h3>{tr("Hora mais activa")}</h3><div id="h-busy" class="kpi orange"></div><div id="h-busy-sub" class="kpi-sub"></div></div>
+</div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Curva de bateria")}</h3>
+  <div id="batt-none" class="no-data" style="padding:20px 0">{tr("Ainda nenhum nó com duas leituras de bateria nesta janela.")}</div>
+  <div id="batt-wrap" class="chart-wrap-lg"><canvas id="battChart"></canvas></div>
+</div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Pacotes por hora")}</h3>
+  <div id="heat" class="heat"></div>
+  <div style="margin-top:6px;font-size:11px;color:#8b949e">{tr("Mais escuro = menos pacotes. As horas a tracejado ficam antes do histórico ou ainda estão por vir.")}</div>
+</div>
+<div class="card" style="margin-top:16px">
+  <h3>{tr("Disponibilidade por nó")}</h3>
+  <div id="avail-hint" style="margin-bottom:6px;font-size:11px;color:#8b949e"></div>
+  <table><tr><th>{tr("Nome")}</th><th>ID</th><th>%</th><th>{tr("Ouvido ao longo da janela")}</th><th>{tr("Último")}</th></tr>
+  <tbody id="avail-tbody" data-filterable="1"></tbody></table>
+  <div id="avail-more" class="kpi-sub" style="margin-top:6px"></div>
+</div>
+<div class="updated" id="h-now"></div>
+<script>
+var _L={json.dumps({"locale": date_locale(), "pkts": tr("{n} pacotes/h"), "quiet": tr("mais calma: {h} ({n} pacotes/h)"),
+                    "nodes": tr("{n} nós"), "hint": tr("metrics_filter_hint") + " · " + tr("Cada célula = {step}; verde se o nó foi ouvido nesse intervalo."),
+                    "more": tr("+ {n} nós com menos disponibilidade não mostrados"), "updated": tr("Actualizado")})};
+var _palette=['#f0883e','#58a6ff','#39d353','#bc8cff','#f85149','#e3b341'];
+var _win={d["window_ms"]};
+function _fmt(s,o){{ return s.replace(/\{{(\w+)\}}/g,function(m,k){{return o[k]===undefined?m:o[k];}}); }}
+function _esc(v){{ return String(v===null||v===undefined?'':v).replace(/[&<>"]/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c];}}); }}
+function _hh(h,full){{ return new Date(2000,0,1,h).toLocaleTimeString(_L.locale,full?{{hour:'2-digit',minute:'2-digit'}}:{{hour:'2-digit'}}); }}
+function _day(ms){{ var dt=new Date(ms); return dt.toLocaleDateString(_L.locale,{{weekday:'short'}}).replace(/[.,]/g,'').slice(0,3)+' '+dt.getDate(); }}
+function _tick(v){{ var dt=new Date(v), t=dt.toLocaleTimeString(_L.locale,{{hour:'2-digit',minute:'2-digit'}});
+  return _win>86400000 ? dt.toLocaleDateString(_L.locale,{{weekday:'short'}})+' '+t : t; }}
+function _datasets(series){{ return series.map(function(s,i){{ return {{ label:s.name, data:s.points, stepped:true,
+  borderColor:_palette[i%6], backgroundColor:_palette[i%6], pointRadius:1.5, fill:false }}; }}); }}
+function _battery(d){{
+  var none=!d.battery.length;
+  document.getElementById('batt-none').style.display=none?'':'none';
+  document.getElementById('batt-wrap').style.display=none?'none':'';
+  if(none || !window.Chart) return;
+  if(window._battChart){{
+    var x=window._battChart.options.scales.x; x.min=Date.now()-_win; x.max=Date.now();
+    window._battChart.data.datasets=_datasets(d.battery); window._battChart.update('none'); return;
+  }}
+  window._battChart=new Chart(document.getElementById('battChart'), {{
+    type:'line', data:{{ datasets:_datasets(d.battery) }},
+    options:{{ responsive:true, maintainAspectRatio:false, parsing:false,
+      scales:{{ x:{{ type:'linear', min:Date.now()-_win, max:Date.now(), grid:{{color:'#21262d'}}, ticks:{{color:'#8b949e', callback:_tick, maxTicksLimit:8}} }},
+                y:{{ min:0, max:100, grid:{{color:'#21262d'}}, ticks:{{color:'#8b949e', callback:function(v){{return v+' %';}}}} }} }},
+      plugins:{{ legend:{{ labels:{{ color:'#8b949e', boxWidth:12 }} }},
+                 tooltip:{{ callbacks:{{ title:function(c){{return _tick(c[0].parsed.x);}}, label:function(c){{return c.dataset.label+': '+c.parsed.y+' %';}} }} }} }} }}
+  }});
+}}
+function _heat(d){{
+  var out=['<div></div>'];
+  for(var h=0;h<24;h++) out.push('<div class="hr">'+(h%3===0?_hh(h):'')+'</div>');
+  d.heat.forEach(function(row,i){{
+    var day=_day(d.heat_days[i]);
+    out.push('<div class="lbl">'+_esc(day)+'</div>');
+    row.forEach(function(n,h){{
+      if(n===null){{ out.push('<div class="none"></div>'); return; }}
+      var r=d.heat_max?n/d.heat_max:0;
+      out.push('<div title="'+_esc(day+' '+_hh(h,true)+' · '+n)+'"'
+        +' style="background:'+(n?'rgba(57,211,83,'+(0.15+0.85*r).toFixed(2)+')':'#21262d')+'"></div>');
+    }});
+  }});
+  document.getElementById('heat').innerHTML=out.join('');
+}}
+var _currentFilter='';
+function _applyFilter(){{
+  var ft=_currentFilter;
+  document.querySelectorAll('table tbody[data-filterable] tr').forEach(function(row){{
+    var hay=Array.from(row.querySelectorAll('td')).map(function(c){{return c.textContent.toLowerCase();}}).join(' ');
+    row.style.display=(!ft||hay.indexOf(ft)!==-1)?'':'none';
+  }});
+}}
+window._metricsFilterTable=function(text){{_currentFilter=(text||'').toLowerCase().trim();_applyFilter();}};
+function _avail(d){{
+  document.getElementById('avail-hint').textContent=_fmt(_L.hint,{{step:d.avail_step}});
+  document.getElementById('avail-tbody').innerHTML=d.avail_rows.map(function(r){{
+    var cells=r[3].split('').map(function(c){{return c==='1'?'<span class="on"></span>':'<span></span>';}}).join('');
+    return '<tr><td>'+_esc(r[1])+'</td><td>'+_esc(r[0])+'</td><td class="pct">'+r[2]+' %</td>'
+      +'<td class="wide"><div class="strip">'+cells+'</div></td><td style="color:#8b949e">'+_esc(r[5])+'</td></tr>'; }}).join('');
+  document.getElementById('avail-more').textContent=d.avail_more?_fmt(_L.more,{{n:d.avail_more}}):'';
+}}
+window._metricsUpdateData=function(d){{
+  if(!d || !d.heat) return;
+  function set(id,v){{ var e=document.getElementById(id); if(e) e.textContent=v; }}
+  set('h-heard', d.n_heard);
+  set('h-avail', d.avail_avg===null?'—':d.avail_avg+' %');
+  set('h-avail-sub', _fmt(_L.nodes,{{n:d.n_heard}}));
+  set('h-busy', d.busiest?_hh(d.busiest[0],true):'—');
+  set('h-busy-sub', d.busiest?_fmt(_L.pkts,{{n:d.busiest[1]}})+' · '+_fmt(_L.quiet,{{h:_hh(d.quietest[0],true),n:d.quietest[1]}}):'');
+  set('h-now', _L.updated+' '+d.now);
+  _battery(d); _heat(d); _avail(d); _applyFilter();
+}};
+window._metricsUpdateData({data_json});
+</script>"""
+        return self._base_html(tr("🕓 Histórico"), body)
+
     def _html_latency(self) -> str:
         d = self._data_latency()
         if d["n"] == 0:

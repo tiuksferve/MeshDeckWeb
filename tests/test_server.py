@@ -156,7 +156,9 @@ def test_state_snapshot_shape(server):
                 "local_node", "channels", "messages", "favorites",
                 "metric_sections", "config_lock", "serial_ports", "log"):
         assert key in snapshot, key
-    assert len(snapshot["metric_sections"]) == 12
+    assert len(snapshot["metric_sections"]) == 13
+    windowed = {s["key"]: s["windowed"] for s in snapshot["metric_sections"]}
+    assert windowed["traffic"] and windowed["history"] and not windowed["overview"]
     json.dumps(snapshot)
 
 

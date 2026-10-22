@@ -54,9 +54,7 @@ class FakeLocalNode:
         self.localConfig = local_config or FakeLocalConfig()
         self.favorites = set()
         self.admin_messages = []
-        self.set_position_calls = []
         self.reset_nodedb_calls = 0
-        self.raise_on_set_position = None
 
     def setFavorite(self, node_id):
         self.favorites.add(node_id)
@@ -66,11 +64,6 @@ class FakeLocalNode:
 
     def resetNodeDb(self):
         self.reset_nodedb_calls += 1
-
-    def setPosition(self, **kwargs):
-        if self.raise_on_set_position is not None:
-            raise self.raise_on_set_position
-        self.set_position_calls.append(kwargs)
 
     def _sendAdmin(self, msg):
         self.admin_messages.append(msg)

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from core.metrics import SECTION_KEYS, SECTIONS, WAITING_SECTIONS, MeshMetrics
+from core.metrics import SECTION_KEYS, SECTIONS, WAITING_SECTIONS, WINDOWED_SECTIONS, MeshMetrics
 from tests.fake_meshtastic import LOCAL_ID, LOCAL_NUM, packet
 
 PEER_NUM = 0x11110001
@@ -45,9 +45,10 @@ def test_core_metrics_imports_without_qt():
 
 
 def test_sections_are_unique_and_complete():
-    assert len(SECTIONS) == 12
-    assert len(set(SECTION_KEYS)) == 12
+    assert len(SECTIONS) == 13
+    assert len(set(SECTION_KEYS)) == 13
     assert WAITING_SECTIONS <= set(SECTION_KEYS)
+    assert WINDOWED_SECTIONS <= set(SECTION_KEYS)
 
 
 @pytest.mark.parametrize("key", SECTION_KEYS)

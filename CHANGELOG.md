@@ -9,21 +9,54 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **🕓 History section** in the metrics, built on the stored history:
+  - **Battery curve** per node over the chosen window (your node first, then
+    the nodes with the most readings; a point is kept when the level changes,
+    or every 30 min). Externally powered nodes (101 %) are left out.
+  - **Availability per node**: the window split into equal intervals (5 min
+    in 1 h up to 2 h in 7 d), lit where the node was heard, with the share of
+    intervals and the last time heard. The global search filters it.
+  - **Packets-per-hour heat map** of the last 7 days, with the busiest and
+    quietest hour of the day.
+- **Node actions in the ☰ menu**, under "Node":
+  - **📍 Send my position**: broadcasts the position the node already has
+    (GPS, or the fixed position) as a position packet. The node's
+    configuration is not touched.
+  - **🗑 Clear the node's NodeDB**, after a confirmation. The firmware keeps
+    the favourite nodes.
+  Both are greyed out until the node is connected, and the result shows up
+  as a notice.
+- `THIRD_PARTY_NOTICES.md` with the licenses of the bundled libraries
+  (Chart.js, Leaflet, Socket.IO) and of the Python dependencies.
+- A License section in the README, with a note that MeshDeckWeb is not
+  affiliated with Meshtastic LLC.
+- `SECURITY.md`: how to report a vulnerability privately.
+
 ### Changed
 
+- **The metrics history keeps 7 days** instead of 24 h, and the charts gain a
+  **7 d** window (with the date on the time axis). About 3 MB per day on a
+  busy mesh, still capped at 50 MB per node; a week comes back in about 5 s
+  on start.
 - **New logo.** Three linked nodes around a fourth (your own node, in blue),
   in the interface's green and blue. It replaces the Meshtastic symbol as the
   browser icon, the home-screen icon (now a 180 px PNG, which iOS needs) and
   the mark in the header and on the login screen.
 - README screenshots taken again, with the new logo.
 
-### Added
+### Fixed
 
-- `THIRD_PARTY_NOTICES.md` with the licenses of the bundled libraries
-  (Chart.js, Leaflet, Socket.IO) and of the Python dependencies.
-- A License section in the README, with a note that MeshDeckWeb is not
-  affiliated with Meshtastic LLC.
-- `SECURITY.md`: how to report a vulnerability privately.
+- Sending the position always went through a fallback, because it first
+  called `Node.setPosition()`, which the Meshtastic library does not have;
+  the success notice also wrongly said "via firmware". It now builds the
+  position packet directly, which is what was actually being sent.
+- The 1 h / 6 h / 24 h buttons seemed to do nothing: only the sections with
+  time charts follow the window, and the Overview (the first to open), RF
+  Quality, Reliability, Latency, Neighbourhood, Range & Links and Intervals
+  show running totals. The selector is now greyed out in those, with a
+  tooltip saying why.
 
 ---
 

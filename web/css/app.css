@@ -326,7 +326,8 @@ tbody tr:hover td { background: var(--input); }
 
 /* ── métricas ───────────────────────────────────────────────────────────── */
 .metrics-layout { display: grid; grid-template-columns: 200px 1fr; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }
-.metrics-window { grid-template-columns: repeat(3, 1fr); margin-bottom: 8px; }
+.metrics-window { grid-template-columns: repeat(4, 1fr); margin-bottom: 8px; }
+.metrics-window button:disabled { opacity: .4; cursor: default; }
 .metrics-frame { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 
 /* ── configuração ───────────────────────────────────────────────────────── */

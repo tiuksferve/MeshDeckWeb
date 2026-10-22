@@ -13,9 +13,10 @@
  * por isso o scroll e o estado dos gráficos ficam onde o utilizador os
  * deixou. Recarrega-se apenas quando não há alternativa (ver tick()).
  *
- * Os gráficos no tempo mostram a janela escolhida (1 h, 6 h ou 24 h); o
- * servidor guarda 24 h e repõe-nas depois de reiniciar. A escolha fica neste
- * dispositivo.
+ * Os gráficos no tempo mostram a janela escolhida (1 h, 6 h, 24 h ou 7 d); o
+ * servidor guarda 7 dias e repõe-nos depois de reiniciar. A escolha fica neste
+ * dispositivo. Nas secções sem gráficos no tempo (valores acumulados) o
+ * selector fica desactivado.
  */
 'use strict';
 
@@ -27,7 +28,7 @@ import { getJSON } from '../api.js';
 
 const REFRESH_MS = 5000;
 const WINDOW_KEY = 'meshdeck.metricsWindow';
-const WINDOWS = ['3600', '21600', '86400'];
+const WINDOWS = ['3600', '21600', '86400', '604800'];
 const DEFAULT_WINDOW = '21600';
 
 let chartWindow = DEFAULT_WINDOW;
@@ -46,7 +47,7 @@ let loadedReloadKey = '';
 
 export function mount() {
   document.getElementById('metrics-clear').addEventListener('click', () => {
-    if (!confirm(t('Limpar todos os dados de métricas, incluindo o histórico guardado das últimas 24 h?'))) return;
+    if (!confirm(t('Limpar todos os dados de métricas, incluindo o histórico guardado dos últimos 7 dias?'))) return;
     commands.clearMetrics();
     loadFrame();   // a secção activa reflecte o esquecimento de imediato
   });
@@ -54,7 +55,7 @@ export function mount() {
   // O snapshot chega também depois de uma troca de idioma; o HTML de cada
   // secção é gerado no servidor, no idioma activo, por isso recarrega-se,
   // mas mantendo a posição de scroll.
-  store.on('snapshot', () => { renderSectionList(); if (visible) loadFrame({ keepScroll: true }); });
+  store.on('snapshot', () => { renderSectionList(); renderWindow(); if (visible) loadFrame({ keepScroll: true }); });
   // A pesquisa global filtra as tabelas da secção.
   store.on('search-changed', applyFilter);
 
@@ -72,8 +73,13 @@ export function mount() {
 }
 
 function renderWindow() {
-  document.querySelectorAll('#metrics-window [data-window]').forEach((b) => {
-    b.classList.toggle('active', b.dataset.window === chartWindow);
+  const section = store.metricSections.find((s) => s.key === activeKey);
+  const windowed = !section || section.windowed !== false;
+  const group = document.getElementById('metrics-window');
+  group.title = windowed ? t('Janela dos gráficos') : t('Esta secção mostra valores acumulados, sem janela de tempo');
+  group.querySelectorAll('[data-window]').forEach((b) => {
+    b.classList.toggle('active', windowed && b.dataset.window === chartWindow);
+    b.disabled = !windowed;
   });
 }
 
@@ -102,6 +108,7 @@ function renderSectionList() {
 function activate(key) {
   activeKey = key;
   renderSectionList();
+  renderWindow();
   document.querySelector('#metrics-list li.active')
     ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   loadFrame();

@@ -22,7 +22,7 @@ from core.favorites import FirmwareFavorites
 from core.loop import CoreLoop
 from core.mesh_worker import MeshtasticWorker
 from core.messages import MessageStore, channel_key, dm_key
-from core.metrics import SECTIONS, MeshMetrics
+from core.metrics import SECTIONS, WINDOWED_SECTIONS, MeshMetrics
 from core.metrics_data import spreading_factor_of
 from core import metrics_history as mh
 from core.node_store import NodeStore, node_record_from_nodedb
@@ -255,7 +255,7 @@ class MeshSession:
 
     def _open_history(self, node_id: str):
         """Passa as métricas para o histórico deste nó local: esquece o que
-        está em memória, repõe as últimas 24 h do ficheiro e junta, por cima,
+        está em memória, repõe os últimos 7 dias do ficheiro e junta, por cima,
         o que chegou antes de se saber qual era o nó. Corre na thread do loop."""
         if not node_id or (self.history is not None and self.history.node_id == node_id):
             return
@@ -559,7 +559,7 @@ class MeshSession:
             "messages":       self.messages.snapshot(),
             "favorites":      sorted(self.favorites.get_all()),
             "packet_stats":   self.packet_stats(),
-            "metric_sections": [{"key": key, "label": tr(label)}
+            "metric_sections": [{"key": key, "label": tr(label), "windowed": key in WINDOWED_SECTIONS}
                                 for key, label in SECTIONS],
             "snr_levels":     self.metrics.snr_levels,
             "config_lock":    self.config_lock.state(),
@@ -642,7 +642,7 @@ class MeshSession:
         language = normalize_language(language)
         with use_language(language):
             return {"language": language,
-                    "metric_sections": [{"key": key, "label": tr(label)}
+                    "metric_sections": [{"key": key, "label": tr(label), "windowed": key in WINDOWED_SECTIONS}
                                         for key, label in SECTIONS]}
 
     # -- configuração do nó -------------------------------------------------

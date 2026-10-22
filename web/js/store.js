@@ -21,7 +21,7 @@ class Store extends EventTarget {
     this.connection = { connected: false, target: {}, bridge: {}, node_ready: false };
     this.reconnect = { attempt: 0, delay_s: 0 };
     this.packetStats = { snr: null, packets_per_min: 0 };
-    this.metricSections = [];        // [{key, label}]
+    this.metricSections = [];        // [{key, label, windowed}]
     this.favorites = new Set();
     this.configLock = { held_by: null };
 
@@ -89,6 +89,7 @@ class Store extends EventTarget {
     this.nodes.clear();
     if (payload.counts) this.counts = payload.counts;
     this.emit('nodes-changed');
+    this.emit('nodedb-reset');
   }
 
   applyConnection(payload) {

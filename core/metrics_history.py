@@ -2,7 +2,7 @@
 core/metrics_history.py — Histórico das métricas em disco (SQLite).
 
 As métricas vivem em memória e perdiam-se a cada reinício. Aqui guarda-se,
-por nó local, o que entrou nelas nas últimas 24 h: os eventos de ingestão
+por nó local, o que entrou nelas nos últimos 7 dias: os eventos de ingestão
 (pacotes, actualizações de nós, mensagens enviadas e confirmações), já
 destilados — só os campos que as métricas usam, nunca o texto das mensagens.
 No arranque, os eventos passam outra vez pelo mesmo código de ingestão, com a
@@ -25,7 +25,7 @@ import time
 
 logger = logging.getLogger("MeshDeck.history")
 
-RETENTION_S    = 24 * 3600
+RETENTION_S    = 7 * 24 * 3600
 LIMIT_BYTES    = 50 * 1024 * 1024
 MIN_FREE_BYTES = 100 * 1024 * 1024
 FLUSH_MS       = 60_000
@@ -200,7 +200,7 @@ class MetricsHistory:
 
     # -- leitura ------------------------------------------------------------
     def events(self):
-        """Eventos das últimas 24 h, por ordem: (ts, kind, data)."""
+        """Eventos dos últimos 7 dias, por ordem: (ts, kind, data)."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT ts, kind, data FROM events WHERE ts >= ? ORDER BY ts, rowid",

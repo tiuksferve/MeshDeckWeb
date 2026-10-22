@@ -346,42 +346,21 @@ class MeshtasticWorker:
         """
         Envia a posição do nó local para a rede.
 
-        Estratégia (por ordem de preferência):
-          1. localNode.setPosition() — a biblioteca lê lat/lon da config interna
-             e faz o broadcast directamente via firmware.
-          2. Fallback manual: lê latitudeI/longitudeI do nodesByNum e constrói
-             o pacote POSITION_APP à mão.
+        Lê a posição que o nó já tem (cache do daemon em nodesByNum ou a
+        posição fixa da configuração) e transmite um pacote POSITION_APP em
+        broadcast. Não altera a configuração do nó: setFixedPosition, a única
+        API de posição da biblioteca no Node, gravaria uma posição fixa.
 
-        Em ambos os casos emite position_sent(True/False, mensagem) só depois
-        de saber o resultado real; o browser mostra o erro, se houver.
+        Emite position_sent(True/False, mensagem) só depois de saber o
+        resultado real; o browser mostra-o num aviso.
         """
         if not self.iface or not self._connected:
             self._emit(self.position_sent, False, tr("Não conectado."))
             return
         try:
-
             local_node = self.iface.localNode
             local_num  = local_node.nodeNum
 
-            # ── Tentativa 1: API de alto nível da biblioteca ──────────────
-            # localNode.setPosition() envia directamente sem precisar de
-            # ler coordenadas da cache TCP — funciona mesmo que nodesByNum
-            # ainda não tenha recebido a posição do firmware.
-            try:
-                local_node.setPosition(
-                    lat=None, lon=None, alt=None,
-                    # Sem argumentos → firmware usa a posição interna (GPS ou fixa)
-                )
-                logger.info("send_position: sent via localNode.setPosition()")
-                self._emit(self.position_sent, True, tr("📍 Posição enviada para a rede (via firmware)."))
-                return
-            except TypeError:
-                # Versões mais antigas da lib exigem lat/lon explícitos
-                pass
-            except Exception as api_err:
-                logger.debug(f"send_position: setPosition() failed ({api_err}), trying fallback")
-
-            # ── Tentativa 2: lê coordenadas da cache e envia manualmente ──
             # Procura em nodesByNum (cache do daemon) e também na config fixa
             pos_data: dict = {}
             if hasattr(self.iface, 'nodesByNum'):

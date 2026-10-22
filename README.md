@@ -88,12 +88,13 @@ well on a desktop browser.
   as Base64, URL-safe Base64, `base64:` prefix or hex
 - Owner (long/short name, licensed)
 
-### 📊 Metrics (12 sections)
+### 📊 Metrics (13 sections)
 
 Charts update live, without reloading the page. The server keeps the **last
-24 hours** on disk, one history per local node, so the metrics come back after
-a restart; the charts show **1 h, 6 h or 24 h** (chosen per device). Message
-text is never stored there.
+7 days** on disk, one history per local node, so the metrics come back after
+a restart; the charts show **1 h, 6 h, 24 h or 7 d** (chosen per device; the
+selector is greyed out in sections that show running totals). Message text is
+never stored there.
 
 | Section | What it measures |
 |---------|-----------------|
@@ -104,6 +105,7 @@ text is never stored there.
 | 📦 Traffic | Packets by type and over time, RF vs MQTT, direct vs relayed |
 | 🔋 Nodes & Battery | Battery, voltage, uptime, hardware models, GPS |
 | 🌡 Environment & Power | Temperature, humidity, pressure, air quality and INA power sensors, temperature chart |
+| 🕓 History | **Battery curve** per node, **availability per node** (in which intervals of the window it was heard) and a **packets-per-hour heat map** of the last 7 days |
 | ✅ Reliability | DM delivery, channel messages confirmed by rebroadcast, duplicates measured by the firmware |
 | ⏱ Latency | Send-to-ACK round trip: average, median, P90 |
 | 🔗 Neighbourhood | NeighborInfo pairs with SNR |
@@ -312,7 +314,7 @@ Settings live in `~/.config/meshdeck/` (or `$XDG_CONFIG_HOME/meshdeck/`):
 | `server.json` | Session key, password hash, bind address, HTTPS settings |
 | `settings.json` | Server language (terminal, logs) and other preferences |
 | `tls/` | Local CA and server certificate (the private keys are readable only by you) |
-| `metrics/` | Metrics history of the last 24 h, one SQLite file per local node (at most 50 MB each; writing pauses when the disk has less than 100 MB free). "🗑 clear metrics" empties it |
+| `metrics/` | Metrics history of the last 7 days, one SQLite file per local node (at most 50 MB each; writing pauses when the disk has less than 100 MB free). "🗑 clear metrics" empties it |
 
 The offline map tiles live in `~/.cache/meshdeck/tiles/` (or
 `$XDG_CACHE_HOME/meshdeck/tiles/`) and can be deleted at any time.
@@ -350,7 +352,7 @@ python3 -m pytest -m "not ui"     # without the browser tests
 
 The tests in `tests/ui/` open the real interface in a headless Chromium or
 Chrome, with simulated nodes, messages and metrics and no internet: login,
-every tab on desktop and phone sizes, map, compass, messages, the 12 metric
+every tab on desktop and phone sizes, map, compass, messages, the 13 metric
 sections, node configuration and the language switch. They are skipped when
 no Chromium/Chrome is installed (`MESHDECK_BROWSER=/path/to/browser` picks
 one). A failing test leaves a screenshot in `.pytest_cache/ui-failures/`.

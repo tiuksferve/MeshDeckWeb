@@ -181,6 +181,7 @@ function wireHeader() {
 
   wireMenu();
   wireSound();
+  wireNodeActions();
   $('btn-console').addEventListener('click', () => { closeMenu(); $('console-drawer').hidden = false; });
   $('console-close').addEventListener('click', () => { $('console-drawer').hidden = true; });
 
@@ -292,6 +293,32 @@ function wireMenu() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('menu').hidden) { closeMenu(); $('menu-btn').focus(); }
   });
+}
+
+/* Acções sobre o nó ligado. A posição vai em broadcast, com a que o nó já
+   tem (GPS ou fixa), sem mudar a configuração. Limpar a NodeDB apaga a lista
+   de nós guardada no próprio nó, por isso pede confirmação. */
+function wireNodeActions() {
+  $('btn-send-position').addEventListener('click', () => {
+    closeMenu();
+    commands.sendPosition();
+  });
+  $('btn-reset-nodedb').addEventListener('click', () => {
+    closeMenu();
+    if (!confirm(t('Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.'))) return;
+    commands.resetNodedb();
+  });
+  store.on('nodedb-reset', () => showToast(t('🗑 NodeDB do nó limpa.'), 'info'));
+  store.on('connection-changed', renderNodeActions);
+  renderNodeActions();
+}
+
+function renderNodeActions() {
+  const ready = Boolean(store.connection.connected && store.connection.node_ready);
+  for (const id of ['btn-send-position', 'btn-reset-nodedb']) {
+    $(id).disabled = !ready;
+    $(id).title = ready ? '' : t('Disponível com o nó ligado');
+  }
 }
 
 /* Som de mensagens: preferência deste dispositivo. Ao ligar toca uma
@@ -465,10 +492,10 @@ function updateConnectFields() {
 
 /* ── toasts ───────────────────────────────────────────────────────────── */
 
-function showToast(message) {
+function showToast(message, kind = '') {
   if (!message) return;
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = kind ? `toast ${kind}` : 'toast';
   el.textContent = message;
   $('toasts').appendChild(el);
   setTimeout(() => el.remove(), 6000);

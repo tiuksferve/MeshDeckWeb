@@ -93,6 +93,25 @@ def test_metrics_window_selector_changes_the_charts(page):
         page.click("#metrics-window [data-window='21600']")
 
 
+def test_metrics_window_selector_is_off_where_the_window_does_not_apply(page):
+    page.click("[data-tab=metrics]")
+    page.click("#metrics-list li[data-key=overview]")
+    page.wait_for("document.querySelector('#metrics-window [data-window]').disabled",
+                  message="o selector continua activo numa secção sem janela")
+    page.click("#metrics-list li[data-key=history]")
+    page.wait_for("!document.querySelector('#metrics-window [data-window]').disabled",
+                  message="o selector não voltou numa secção com janela")
+    page.click("#metrics-window [data-window='604800']")
+    try:
+        page.wait_for(f"{FRAME}.src.includes('window=604800')"
+                      f" && {FRAME}.contentDocument?.readyState === 'complete'"
+                      f" && {FRAME}.contentDocument.querySelectorAll('#heat > div').length === 25 * 8"
+                      f" && !!{FRAME}.contentDocument.querySelector('#avail-tbody tr .strip span')",
+                      timeout=15, message="a secção Histórico não desenhou o mapa de calor e a disponibilidade")
+    finally:
+        page.click("#metrics-window [data-window='21600']")
+
+
 # ---------------------------------------------------------------------------
 # Configuração do nó
 # ---------------------------------------------------------------------------
