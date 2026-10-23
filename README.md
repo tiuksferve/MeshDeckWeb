@@ -52,8 +52,10 @@ well on a desktop browser.
 ### 🗺 Map (Leaflet)
 
 - Themes: 🌑 Dark · ☀ Light · 🛰 Satellite (hybrid, with place names and roads)
-- Markers coloured by state — selected, packet just received, RF active,
-  MQTT, inactive (>2 h) — with the colour legend in each node's popup
+- Each node is a label with its short name, coloured by state — selected,
+  packet just received, RF active, MQTT, inactive (>2 h) — with the colour
+  legend in each node's popup, and easy to tap on a phone; overlapping nodes
+  are grouped into a circle with the count, which opens on tap
 - Traceroutes with per-segment SNR, NeighborInfo links
 - On phones, the theme and traceroute list open as a sheet over the map
 
@@ -404,7 +406,7 @@ The code was reviewed, tested and validated by the author on real hardware
 ## 📄 License
 
 MeshDeckWeb is released under the [MIT License](LICENSE). The bundled
-libraries (Chart.js, Leaflet, Socket.IO) and the Python dependencies keep their
+libraries (Chart.js, Leaflet, Leaflet.markercluster, Socket.IO) and the Python dependencies keep their
 own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Meshtastic® is a registered trademark of Meshtastic LLC. MeshDeckWeb is an

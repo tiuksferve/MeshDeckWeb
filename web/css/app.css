@@ -245,6 +245,28 @@ tbody tr:hover td { background: var(--input); }
 .map-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; font-size: 11px; }
 .map-legend-sel { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #00ff88; }
 .map-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid; flex: none; }
+/* Nó no mapa: etiqueta com o nome curto, centrada numa caixa transparente de
+   56×44 px que é a área de toque (ver HIT_W/HIT_H em map.js). */
+.map-node { display: flex; align-items: center; justify-content: center; }
+.map-node-pill {
+  font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace; color: #fff; white-space: nowrap;
+  padding: 3px 5px; border: 2px solid; border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .55); text-shadow: 0 1px 1px rgba(0, 0, 0, .45);
+}
+.map-node-inactive { color: #ddd; font-size: 10px; padding: 2px 4px; opacity: .8; }
+.map-node-active, .map-node-selected { font-size: 12px; padding: 4px 6px; }
+/* Grupo de nós sobrepostos (ver clusterIcon em map.js); toca-se para aproximar. */
+.map-cluster-dot {
+  display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid;
+  font: 700 12px/1 ui-monospace, Menlo, Consolas, monospace; color: #fff;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, .18), 0 1px 3px rgba(0, 0, 0, .55); text-shadow: 0 1px 1px rgba(0, 0, 0, .45);
+}
+.map-cluster-small  { width: 28px; height: 28px; }
+.map-cluster-medium { width: 34px; height: 34px; }
+.map-cluster-large  { width: 40px; height: 40px; font-size: 13px; }
+.map-cluster-inactive { color: #ddd; opacity: .85; }
+.map-cluster-selected { color: #04210f; text-shadow: none; box-shadow: 0 0 0 4px rgba(0, 255, 136, .35), 0 1px 3px rgba(0, 0, 0, .55); }
+.map-node-selected { color: #04210f; text-shadow: none; box-shadow: 0 0 0 3px rgba(0, 255, 136, .35), 0 1px 3px rgba(0, 0, 0, .55); }
 
 /* ── mensagens ──────────────────────────────────────────────────────────── */
 .messages-layout { display: grid; grid-template-columns: 260px 1fr; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }

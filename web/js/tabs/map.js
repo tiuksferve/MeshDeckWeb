@@ -1,8 +1,9 @@
 /*
  * web/js/tabs/map.js — Aba do mapa (Leaflet).
  *
- * Marcadores coloridos por estado (seleccionado, activo agora, inactivo, via
- * MQTT, via RF), traceroutes a verde com SNR por segmento, vizinhança
+ * Cada nó é uma etiqueta com o nome curto, na cor do estado (seleccionado,
+ * activo agora, inactivo, via MQTT, via RF); nós sobrepostos juntam-se num
+ * círculo com o número (Leaflet.markercluster), traceroutes a verde com SNR por segmento, vizinhança
  * NeighborInfo a roxo tracejado, e os temas Escuro, Claro e Satélite. Escuro
  * e Claro passam pela cache do servidor (funcionam offline nas zonas já
  * vistas); o Satélite vai directamente à Esri e precisa de internet.
@@ -44,8 +45,8 @@ const ONLINE_WINDOW_S = 2 * 3600;
 let map = null;
 let tileLayer = null;
 let overlayLayers = [];        // nomes/estradas por cima do satélite
-let markerLayer = null;
-const markers = new Map();          // id_string -> L.circleMarker
+let markerLayer = null;        // L.markerClusterGroup
+const markers = new Map();          // id_string -> L.marker com etiqueta
 let traceLayer = null;
 let neighborLayer = null;
 let initialized = false;
@@ -98,7 +99,7 @@ export function onShow() {
   // Uma selecção feita com o mapa escondido não pôde centrar (o Leaflet
   // mede um contentor de tamanho zero); aplica-se agora que é visível.
   if (pendingCenterId) {
-    centerOn(pendingCenterId);
+    showNode(pendingCenterId);
     pendingCenterId = null;
   }
 }
@@ -113,8 +114,16 @@ export function focusNode(nodeId) {
   drawMarkers();
   if (!centerOn(nodeId)) return;
   const marker = markers.get(nodeId);
-  marker?.bringToFront();
-  marker?.openPopup();
+  // Dentro de um grupo, o marcador não está no mapa: aproxima ou abre o
+  // grupo até ele aparecer, e só então abre o popup.
+  if (marker) markerLayer.zoomToShowLayer(marker, () => marker.openPopup());
+}
+
+/* Centra e, se o nó estiver dentro de um grupo, abre-o até ele aparecer. */
+function showNode(nodeId) {
+  if (!centerOn(nodeId)) return;
+  const marker = markers.get(nodeId);
+  if (marker) markerLayer.zoomToShowLayer(marker, () => {});
 }
 
 function centerOn(nodeId) {
@@ -142,7 +151,14 @@ function initMap() {
 
   map = L.map('map-canvas', { zoomControl: true }).setView(center, zoom);
   setTileLayer(theme);
-  markerLayer = L.layerGroup().addTo(map);
+  markerLayer = L.markerClusterGroup({
+    // Do tamanho da área de toque: dois nós mais perto do que isso tapavam a
+    // área um do outro (tocar num podia abrir o vizinho), por isso juntam-se.
+    maxClusterRadius: HIT_W,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,        // nós na mesma posição abrem em leque
+    iconCreateFunction: clusterIcon,
+  }).addTo(map);
   map.getContainer().addEventListener('click', (event) => {
     const btn = event.target.closest('.popup-traceroute');
     if (btn) requestTraceroute(btn.dataset.id);
@@ -173,14 +189,60 @@ function setTheme(name) {
 
 /* ── marcadores ───────────────────────────────────────────────────────── */
 
-// Cores dos marcadores; a legenda do pop-up usa as mesmas.
+// Cores dos marcadores; a legenda do pop-up usa as mesmas. `key` dá a classe
+// da etiqueta (map-node-<key>), que define o tamanho e o texto de cada estado.
 const MARKER_STATES = {
-  selected: { color: '#00cc66', fill: '#00ff88', radius: 9, label: 'Seleccionado' },
-  active:   { color: '#cc0000', fill: '#ff4444', radius: 7, label: 'Pacote recebido' },
-  inactive: { color: '#444455', fill: '#555566', radius: 5, label: 'Inactivo (>2h)' },
-  mqtt:     { color: '#cc6600', fill: '#ff8800', radius: 6, label: 'MQTT' },
-  rf:       { color: '#1050aa', fill: '#2b7cd3', radius: 6, label: 'RF activo' },
+  selected: { key: 'selected', color: '#00cc66', fill: '#00ff88', label: 'Seleccionado' },
+  active:   { key: 'active',   color: '#cc0000', fill: '#ff4444', label: 'Pacote recebido' },
+  inactive: { key: 'inactive', color: '#444455', fill: '#555566', label: 'Inactivo (>2h)' },
+  mqtt:     { key: 'mqtt',     color: '#cc6600', fill: '#ff8800', label: 'MQTT' },
+  rf:       { key: 'rf',       color: '#1050aa', fill: '#2b7cd3', label: 'RF activo' },
 };
+
+// A caixa do marcador é maior do que a etiqueta e transparente: é a área que
+// apanha o toque. 44 px é o mínimo confortável para um dedo; os antigos
+// pontos tinham 10 a 18 px e no telemóvel quase nunca se acertava neles.
+const HIT_W = 56;
+const HIT_H = 44;
+
+function markerLabel(node) {
+  return node.short_name || node.id_string.replace(/^!/, '').slice(-4);
+}
+
+function markerIcon(node, style) {
+  return L.divIcon({
+    className: 'map-node',
+    iconSize: [HIT_W, HIT_H],
+    iconAnchor: [HIT_W / 2, HIT_H / 2],
+    html: `<span class="map-node-pill map-node-${style.key}"
+                 style="background:${style.fill};border-color:${style.color}">${escapeHtml(markerLabel(node))}</span>`,
+  });
+}
+
+/* Grupo de nós sobrepostos: círculo com o número, na cor do "melhor" estado
+   lá dentro — verde se tem o seleccionado, vermelho se tem o que acabou de
+   falar, azul se tem algum activo, cinzento se estão todos inactivos. A
+   caixa transparente à volta é, como nos nós, a área de toque. */
+const CLUSTER_ORDER = ['selected', 'active', 'rf', 'mqtt', 'inactive'];
+
+function clusterIcon(cluster) {
+  const children = cluster.getAllChildMarkers();
+  const keys = new Set(children.map((m) => m.stateKey));
+  const key = CLUSTER_ORDER.find((k) => keys.has(k)) || 'inactive';
+  const style = MARKER_STATES[key];
+  const n = children.length;
+  const size = n < 10 ? 'small' : n < 50 ? 'medium' : 'large';
+  return L.divIcon({
+    className: 'map-node map-cluster',
+    iconSize: [HIT_H, HIT_H],
+    html: `<span class="map-cluster-dot map-cluster-${size} map-cluster-${key}" data-count="${n}"
+                 style="background:${style.fill};border-color:${style.color}">${n}</span>`,
+  });
+}
+
+// Ordem de sobreposição: o seleccionado por cima de tudo, depois o nó que
+// acabou de falar; os inactivos ficam por baixo dos outros.
+const Z_OFFSET = { selected: 3000, active: 2000, rf: 1000, mqtt: 1000, inactive: 0 };
 
 /* Estado do nó sem contar com a selecção: é a cor que o ponto tem quando
    não está seleccionado, e a que o popup explica. */
@@ -246,6 +308,7 @@ function tooltipText(node) {
 function drawMarkers() {
   if (!initialized) return;
   const seen = new Set();
+  const changed = [];
   const nodesLoc = store.nodeList().filter((n) => n.latitude != null && n.longitude != null);
   for (const node of nodesLoc) {
     const id = node.id_string;
@@ -255,21 +318,32 @@ function drawMarkers() {
 
     let marker = markers.get(id);
     if (!marker) {
-      marker = L.circleMarker(latLng, { fillOpacity: .9, weight: 2 })
-        .bindTooltip('', { direction: 'top' })
-        .bindPopup('');
+      // Já com a etiqueta e o estado: o grupo calcula a cor ao receber o marcador.
+      marker = L.marker(latLng, { keyboard: false, icon: markerIcon(node, style), zIndexOffset: Z_OFFSET[style.key] })
+        .bindTooltip('', { direction: 'top', offset: L.point(0, -12) })
+        .bindPopup('', { offset: L.point(0, -8) });
       marker.on('click', () => store.setSelectedNode(id));
-      marker.addTo(markerLayer);
+      // A dica repete o que o popup mostra e ficava por trás dele.
+      marker.on('popupopen', () => marker.closeTooltip());
+      marker.iconKey = `${style.key}|${markerLabel(node)}`;
+      marker.stateKey = style.key;
+      markerLayer.addLayer(marker);
       markers.set(id, marker);
-    } else {
+    } else if (!marker.getLatLng().equals(latLng)) {
       marker.setLatLng(latLng);
     }
-    marker.setStyle({ color: style.color, fillColor: style.fill });
-    marker.setRadius(style.radius);
-    marker.getTooltip().options.offset = L.point(0, -style.radius);
+    // Trocar o ícone recria o elemento; só se faz quando a etiqueta muda,
+    // não a cada pacote.
+    const icon = `${style.key}|${markerLabel(node)}`;
+    if (marker.iconKey !== icon) {
+      marker.setIcon(markerIcon(node, style));
+      marker.setZIndexOffset(Z_OFFSET[style.key]);
+      marker.iconKey = icon;
+      // A cor do grupo depende do estado dos nós lá dentro.
+      if (marker.stateKey !== style.key) changed.push(marker);
+      marker.stateKey = style.key;
+    }
     marker.setTooltipContent(tooltipText(node));
-    // O seleccionado por cima dos vizinhos, nunca tapado por eles.
-    if (id === store.selectedNodeId) marker.bringToFront();
     // Só se reescreve o popup quando o conteúdo muda, para não o redesenhar
     // por baixo do utilizador a cada pacote.
     const html = popupHtml(node);
@@ -281,13 +355,14 @@ function drawMarkers() {
   for (const [id, marker] of markers) {
     if (!seen.has(id)) { markerLayer.removeLayer(marker); markers.delete(id); }
   }
+  if (changed.length) markerLayer.refreshClusters(changed);
   drawNeighborLines();
 }
 
 function onSelectionChanged(nodeId) {
   if (!initialized) { pendingCenterId = nodeId; return; }
   drawMarkers();
-  if (mapVisible()) centerOn(nodeId);
+  if (mapVisible()) showNode(nodeId);
   else pendingCenterId = nodeId;
 }
 

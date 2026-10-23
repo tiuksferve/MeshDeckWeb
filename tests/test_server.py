@@ -229,6 +229,8 @@ def test_vendored_assets_are_served(server):
     for path in ("/vendor/socket.io.min.js", "/vendor/chart.umd.min.js",
                  "/vendor/leaflet/leaflet.js", "/vendor/leaflet/leaflet.css",
                  "/vendor/leaflet/images/marker-icon.png",
+                 "/vendor/leaflet.markercluster/leaflet.markercluster.js",
+                 "/vendor/leaflet.markercluster/MarkerCluster.css",
                  "/css/app.css", "/js/app.js"):
         response = server["client"].get(path)
         assert response.status_code == 200, path

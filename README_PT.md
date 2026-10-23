@@ -52,8 +52,10 @@ igualmente bem num browser de computador.
 ### 🗺 Mapa (Leaflet)
 
 - Temas: 🌑 Escuro · ☀ Claro · 🛰 Satélite (híbrido, com localidades e estradas)
-- Marcadores coloridos por estado — seleccionado, pacote acabado de receber,
-  RF activo, MQTT, inactivo (>2 h) — com a legenda da cor no popup de cada nó
+- Cada nó é uma etiqueta com o nome curto, colorida por estado — seleccionado,
+  pacote acabado de receber, RF activo, MQTT, inactivo (>2 h) — com a legenda
+  da cor no popup de cada nó, e fácil de tocar no telemóvel; nós sobrepostos
+  juntam-se num círculo com o número, que se abre ao tocar
 - Traceroutes com SNR por segmento, ligações NeighborInfo
 - No telemóvel, o tema e a lista de traceroutes abrem numa folha sobre o mapa
 
@@ -410,7 +412,7 @@ O código foi revisto, testado e validado pelo autor em hardware real
 ## 📄 Licença
 
 O MeshDeckWeb é distribuído sob a [licença MIT](LICENSE). As bibliotecas
-incluídas (Chart.js, Leaflet, Socket.IO) e as dependências Python mantêm as
+incluídas (Chart.js, Leaflet, Leaflet.markercluster, Socket.IO) e as dependências Python mantêm as
 suas próprias licenças, listadas em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Meshtastic® é uma marca registada da Meshtastic LLC. O MeshDeckWeb é um

@@ -9,6 +9,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Nodes on the map are labels with their short name** instead of small
+  dots, in the same state colours (selected, packet just received, RF, MQTT,
+  inactive). The selected node and the one that just spoke sit on top;
+  inactive nodes are smaller and sit underneath.
+- **Easier to tap on a phone**: each node answers to a 56 × 44 px area around
+  its label (the dots were 10–18 px). The hover hint no longer stays behind
+  the popup once it opens.
+- **Overlapping nodes are grouped** into a circle with the number of nodes,
+  in the colour of the most relevant state inside (green if it holds the
+  selected node, red if it holds the one that just spoke, blue if any is
+  active, grey if all are inactive). Tapping it zooms in until the nodes come
+  apart; nodes at the very same spot open in a fan. Selecting a node that is
+  inside a group (from the list or the 📍) opens the group. Two nodes closer
+  than a tap area are always grouped, so a tap can no longer land on the
+  neighbour. Uses Leaflet.markercluster 1.5.3 (MIT), bundled like Leaflet.
+
 ---
 
 ## [2.3.0-beta] — 2026-10-23
