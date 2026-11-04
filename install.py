@@ -146,6 +146,14 @@ TEXTS = {
                     "Add an icon to the applications menu? (starts the server and opens the browser)"),
     "desktop_ok": ("✅ Ícone criado no menu de aplicações: {path}", "✅ Icon added to the applications menu: {path}"),
     "desktop_comment": ("Interface web para a rede Meshtastic", "Web interface for the Meshtastic network"),
+    "ask_desktop_shortcut": ("Pôr também um atalho no ambiente de trabalho?", "Also put a shortcut on the desktop?"),
+    "desktop_shortcut_ok": ("✅ Atalho no ambiente de trabalho: {path}", "✅ Desktop shortcut: {path}"),
+    "desktop_sudo": ("Para o atalho abrir com um clique, a entrada do menu vai também para {folder}\n"
+                     "(pede a password de administrador).",
+                     "For the shortcut to open with one click, the menu entry also goes to {folder}\n"
+                     "(asks for the administrator password)."),
+    "desktop_asks": ("⚠ Sem acesso à pasta do sistema: o atalho abre, mas o ambiente de trabalho pergunta antes se o quer executar.",
+                     "⚠ No access to the system folder: the shortcut works, but the desktop asks first whether to execute it."),
     "desktop_moved": ("Se mudar a pasta do MeshDeckWeb de sítio, corra o instalador outra vez para o ícone a acompanhar.",
                       "If you move the MeshDeckWeb folder, run the installer again so the icon follows it."),
 }
@@ -497,6 +505,77 @@ def write_desktop_entry(port: int, log_path: str, root: str = ROOT, apps_dir: st
     return path
 
 
+def desktop_folder():
+    """A pasta do ambiente de trabalho (Desktop, ou "Área de Trabalho" num
+    sistema em português), ou None se não existir."""
+    folder = None
+    if shutil.which("xdg-user-dir"):
+        try:
+            folder = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True,
+                                    text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            folder = None
+    folder = folder or os.path.join(os.path.expanduser("~"), "Desktop")
+    # Sem pasta própria, o xdg-user-dir devolve a home: não se põe lá nada.
+    if not os.path.isdir(folder) or os.path.samefile(folder, os.path.expanduser("~")):
+        return None
+    return folder
+
+
+SYSTEM_APPS_DIR = "/usr/local/share/applications"
+
+
+def install_system_entry(root: str = ROOT, system_dir: str = SYSTEM_APPS_DIR):
+    """Copia a entrada do menu para a pasta de aplicações do sistema.
+
+    Escreve directamente se a pasta for gravável; senão pede o sudo (a
+    password de administrador). Devolve o caminho, ou None se não deu.
+    """
+    path = os.path.join(system_dir, DESKTOP_FILE)
+    text = desktop_entry(root)
+    if os.access(system_dir, os.W_OK):
+        with open(path, "w") as fh:
+            fh.write(text)
+        return path
+    if not shutil.which("sudo"):
+        return None
+    print(t("desktop_sudo", folder=system_dir))
+    try:
+        done = subprocess.run(["sudo", "sh", "-c", f'mkdir -p "{system_dir}" && cat > "{path}"'],
+                              input=text, text=True).returncode == 0
+    except OSError:
+        done = False
+    return path if done else None
+
+
+def write_desktop_shortcut(folder: str, root: str = ROOT, system_dir: str = SYSTEM_APPS_DIR) -> str:
+    """Atalho no ambiente de trabalho que abre com um clique.
+
+    O ambiente de trabalho do Raspberry Pi (pcmanfm) pergunta "Executar este
+    ficheiro?" para qualquer atalho que seja uma cópia nas pastas do
+    utilizador, executável ou não. Sem perguntar, só abre uma ligação
+    (Type=Link) a uma entrada numa pasta de aplicações do sistema — como
+    fazem os pacotes instalados (o tar1090, por exemplo). A opção "Adicionar
+    ao ambiente de trabalho" do próprio menu liga à entrada em
+    ~/.local/share/applications, que nem chega a abrir.
+
+    Sem acesso à pasta do sistema fica uma cópia da entrada, que abre depois
+    de confirmar.
+    """
+    path = os.path.join(folder, DESKTOP_FILE)
+    icon = os.path.join(root, "web", "img", "logo.svg")
+    target = install_system_entry(root, system_dir)
+    if target:
+        text = "\n".join(["[Desktop Entry]", "Type=Link", "Name=MeshDeckWeb",
+                          f"Icon={icon}", f"URL={target}", ""])
+    else:
+        print(t("desktop_asks"))
+        text = desktop_entry(root)
+    with open(path, "w") as fh:
+        fh.write(text)
+    return path
+
+
 def stage_configure(chosen_lang):
     global lang
     lang = chosen_lang
@@ -527,6 +606,9 @@ def stage_configure(chosen_lang):
     if desktop_supported() and ask_yes(t("ask_desktop"), default=True):
         entry = write_desktop_entry(port, os.path.join(config_dir(), "server.log"))
         print(t("desktop_ok", path=entry))
+        folder = desktop_folder()
+        if folder and ask_yes(t("ask_desktop_shortcut"), default=True):
+            print(t("desktop_shortcut_ok", path=write_desktop_shortcut(folder)))
         print(t("desktop_moved"))
 
     hosts = (tls.local_addresses() or ["<ip>"]) if network else ["127.0.0.1"]

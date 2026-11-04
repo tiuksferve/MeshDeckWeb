@@ -16,7 +16,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the MeshDeckWeb logo, starts the server if it is not running yet (waiting
   until it answers) and opens the browser at `http://localhost:<port>/`; a
   second click only opens the browser. `./start-desktop.sh stop` stops the
-  server of that folder and nothing else. Without a terminal, the
+  server of that folder and nothing else. The installer also offers the
+  same icon on the desktop, opening with one click: the Raspberry Pi desktop
+  asks "Execute?" for any shortcut copied into the user's folders, so the
+  menu entry also goes to `/usr/local/share/applications/` (with `sudo` when
+  needed) and the desktop gets a `Type=Link` to it, like installed packages.
+  The menu's own "Add to desktop" links to the user's entry, which does not
+  open. Without a terminal, the
   server log goes to `~/.config/meshdeck/server.log`, trimmed when it grows
   past 5 MB. Nothing needs `sudo`: the icon lives in
   `~/.local/share/applications/`.

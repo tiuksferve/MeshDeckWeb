@@ -154,7 +154,11 @@ The installer guides you step by step:
    is not running yet and opens the browser at `http://localhost:<port>/`.
    Closing the browser leaves the server running for your other devices;
    ☰ → **⏹ Stop the server** in a browser on that same machine stops it
-   (or `./start-desktop.sh stop` in a terminal). Without a terminal,
+   (or `./start-desktop.sh stop` in a terminal). It also offers the same icon
+   on the desktop, opening with one click: the menu entry is copied to
+   `/usr/local/share/applications/` (with `sudo` if that folder is not yours)
+   and the desktop gets a link to it, like installed packages do (the menu's
+   own "Add to desktop" makes a link that does not open) Without a terminal,
    the server log goes to `~/.config/meshdeck/server.log`
 
 From then on, start the server with:

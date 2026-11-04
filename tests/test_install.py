@@ -216,3 +216,38 @@ def test_desktop_step_only_on_linux_with_xdg_open(monkeypatch):
     assert not install.desktop_supported()
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/xdg-open")
     assert install.desktop_supported()
+
+
+def test_desktop_shortcut_links_to_a_system_entry(tmp_path, monkeypatch):
+    """Como o tar1090: uma ligação a uma entrada na pasta de aplicações do
+    sistema, que o ambiente de trabalho do Raspberry Pi abre sem perguntar."""
+    monkeypatch.setattr(install, "lang", "en")
+    system = tmp_path / "system"
+    system.mkdir()
+    desk = tmp_path / "Desktop"
+    desk.mkdir()
+    path = install.write_desktop_shortcut(str(desk), root="/opt/MeshDeckWeb", system_dir=str(system))
+    text = open(path).read()
+    assert "Type=Link" in text and f"URL={system}/{install.DESKTOP_FILE}" in text
+    assert "Icon=/opt/MeshDeckWeb/web/img/logo.svg" in text
+    entry = open(system / install.DESKTOP_FILE).read()
+    assert "Type=Application" in entry and 'Exec="/opt/MeshDeckWeb/start-desktop.sh"' in entry
+
+
+def test_desktop_shortcut_without_the_system_folder_is_a_copy(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(install, "lang", "en")
+    monkeypatch.setattr(install.os, "access", lambda path, mode: False)
+    monkeypatch.setattr(install.shutil, "which", lambda name: None)       # sem sudo
+    path = install.write_desktop_shortcut(str(tmp_path), root="/opt/MeshDeckWeb",
+                                          system_dir=str(tmp_path / "nope"))
+    text = open(path).read()
+    assert "Type=Application" in text and 'Exec="/opt/MeshDeckWeb/start-desktop.sh"' in text
+    assert "asks first" in capsys.readouterr().out
+
+
+def test_no_desktop_shortcut_without_a_desktop_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(install.os.path, "expanduser", lambda p: str(tmp_path))
+    monkeypatch.setattr(install.shutil, "which", lambda name: None)
+    assert install.desktop_folder() is None          # não há ~/Desktop
+    (tmp_path / "Desktop").mkdir()
+    assert install.desktop_folder() == str(tmp_path / "Desktop")

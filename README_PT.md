@@ -154,7 +154,12 @@ O instalador guia-o passo a passo:
    se ainda não estiver a correr, e abre o browser em `http://localhost:<porta>/`.
    Fechar o browser deixa o servidor a correr para os outros dispositivos;
    ☰ → **⏹ Parar o servidor** num browser nessa mesma máquina pára-o (ou
-   `./start-desktop.sh stop` num terminal). Sem terminal, o
+   `./start-desktop.sh stop` num terminal). Oferece também o mesmo ícone no
+   ambiente de trabalho, que abre com um clique: a entrada do menu é copiada
+   para `/usr/local/share/applications/` (com `sudo` se a pasta não for sua)
+   e o ambiente de trabalho fica com uma ligação a ela, como fazem os pacotes
+   instalados (o "Adicionar ao ambiente de trabalho" do próprio menu cria uma
+   ligação que não abre) Sem terminal, o
    log do servidor fica em `~/.config/meshdeck/server.log`
 
 A partir daí, arranque o servidor com:
