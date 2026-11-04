@@ -32,6 +32,27 @@ def test_logout_returns_to_login(page):
     page.wait_for("!document.getElementById('login').hidden", message="o logout não voltou ao login")
 
 
+def test_menu_stops_the_server_from_the_machine_itself(page, ui_server):
+    app = ui_server["app"]
+    stops, original = [], app.stop_server
+    app.stop_server = lambda: stops.append(1)
+    try:
+        page.click("#menu-btn")
+        # O browser dos testes corre na mesma máquina (127.0.0.1), como o ícone do uConsole.
+        assert page.js("!document.getElementById('server-actions').hidden")
+        page.js("window.confirm = () => false")
+        page.click("#btn-stop-server")
+        assert stops == [], "parou sem confirmação"
+        page.js("window.confirm = () => true")
+        page.click("#menu-btn")
+        page.click("#btn-stop-server")
+        page.wait_for("!document.getElementById('stopped').hidden", message="não mostrou o servidor parado")
+        assert stops == [1]
+        assert page.js("document.getElementById('app').hidden")
+    finally:
+        app.stop_server = original
+
+
 def test_menu_node_actions_reach_the_server(page):
     page.click("#menu-btn")
     assert not page.js("document.getElementById('btn-send-position').disabled"), \

@@ -21,6 +21,7 @@ scratch/
 # Atalhos de arranque gerados pelo install.py
 start.sh
 start.bat
+start-desktop.sh
 
 # User data
 # Nota: não usar "*.json" aqui. O frontend web traz ficheiros JSON versionados

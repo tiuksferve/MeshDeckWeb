@@ -124,6 +124,23 @@ def test_login_with_the_generated_password(server):
     assert server["client"].get("/api/whoami").get_json()["authenticated"] is True
 
 
+def test_stop_server_only_from_the_machine_itself(server):
+    stops = []
+    server["app"].stop_server = lambda: stops.append(1)
+    client = server["client"]
+    assert client.post("/api/server/stop").status_code == 401        # sem sessão
+    login(server)
+    assert client.get("/api/whoami").get_json()["local"] is True
+    # De outro aparelho na rede: o menu não mostra o botão e o servidor recusa.
+    remote = {"REMOTE_ADDR": "192.168.1.40"}
+    assert client.get("/api/whoami", environ_base=remote).get_json()["local"] is False
+    response = client.post("/api/server/stop", environ_base=remote)
+    assert response.status_code == 403 and response.get_json()["error"]
+    assert stops == []
+    assert client.post("/api/server/stop").get_json() == {"ok": True}
+    assert stops == [1]
+
+
 def test_login_with_a_wrong_password(server):
     response = server["client"].post("/api/login", json={"password": "errada"})
     assert response.status_code == 401

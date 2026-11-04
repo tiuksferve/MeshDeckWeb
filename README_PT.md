@@ -149,6 +149,13 @@ O instalador guia-o passo a passo:
 6. Define o espaço para o **mapa offline** (200 MB por omissão)
 7. Cria um **atalho de arranque** — `start.sh` (Linux/macOS) ou `start.bat`
    (Windows) — e mostra os endereços a abrir
+8. Em Linux com ambiente gráfico (uConsole, Raspberry Pi), oferece um **ícone
+   no menu de aplicações**, com o logótipo do MeshDeckWeb: arranca o servidor,
+   se ainda não estiver a correr, e abre o browser em `http://localhost:<porta>/`.
+   Fechar o browser deixa o servidor a correr para os outros dispositivos;
+   ☰ → **⏹ Parar o servidor** num browser nessa mesma máquina pára-o (ou
+   `./start-desktop.sh stop` num terminal). Sem terminal, o
+   log do servidor fica em `~/.config/meshdeck/server.log`
 
 A partir daí, arranque o servidor com:
 
@@ -335,7 +342,7 @@ browser.
 
 ```
 meshdeckweb/
-├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho)
+├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho, ícone no menu)
 ├── run_server.py          ← Ponto de entrada e opções da linha de comandos
 ├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
 ├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas

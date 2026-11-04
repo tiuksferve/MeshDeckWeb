@@ -9,6 +9,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **🖥 Icon in the applications menu** (Linux with a desktop, such as the
+  uConsole or a Raspberry Pi): the installer offers it at the end. It shows
+  the MeshDeckWeb logo, starts the server if it is not running yet (waiting
+  until it answers) and opens the browser at `http://localhost:<port>/`; a
+  second click only opens the browser. `./start-desktop.sh stop` stops the
+  server of that folder and nothing else. Without a terminal, the
+  server log goes to `~/.config/meshdeck/server.log`, trimmed when it grows
+  past 5 MB. Nothing needs `sudo`: the icon lives in
+  `~/.local/share/applications/`.
+- **⏹ Stop the server from the ☰ menu**, after a confirmation, then a
+  "Server stopped" screen. Only shown in a browser on the server's own
+  machine (`localhost`), and the server refuses the request from anywhere
+  else: from the phone there would be no way to start it again.
+
 ### Changed
 
 - **Nodes on the map are labels with their short name** instead of small

@@ -12,13 +12,15 @@ primeira execução com o próprio código do servidor (password, acesso,
 ligação ao nó, HTTPS, mapa offline): o resultado é o mesmo que as opções do
 run_server.py.
 
-No fim fica um atalho de arranque (start.sh ou start.bat). Pode correr o
+No fim fica um atalho de arranque (start.sh ou start.bat) e, em Linux com
+ambiente gráfico, opcionalmente um ícone no menu de aplicações. Pode correr o
 instalador outra vez para mudar a configuração; o ambiente já instalado é
 reaproveitado.
 """
 
 import getpass
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -29,6 +31,9 @@ WINDOWS = os.name == "nt"
 VENV_PY = os.path.join(VENV, "Scripts", "python.exe") if WINDOWS else os.path.join(VENV, "bin", "python")
 LAUNCHER = os.path.join(ROOT, "start.bat" if WINDOWS else "start.sh")
 MIN_PYTHON = (3, 9)
+DESKTOP_FILE = "meshdeckweb.desktop"
+DESKTOP_SCRIPT = "start-desktop.sh"
+SERVER_WAIT_S = 20             # quanto o ícone espera pelo servidor antes de abrir o browser
 
 TEXTS = {
     "title": ("📡 MeshDeckWeb — instalação guiada", "📡 MeshDeckWeb — guided setup"),
@@ -136,6 +141,13 @@ TEXTS = {
     "mac_fw_ok": ("✅ Python autorizado na firewall.", "✅ Python allowed through the firewall."),
     "mac_fw_manual": ("Para autorizar mais tarde, corra:", "To allow it later, run:"),
     "ask_start": ("Arrancar o servidor agora?", "Start the server now?"),
+
+    "ask_desktop": ("Criar um ícone no menu de aplicações? (arranca o servidor e abre o browser)",
+                    "Add an icon to the applications menu? (starts the server and opens the browser)"),
+    "desktop_ok": ("✅ Ícone criado no menu de aplicações: {path}", "✅ Icon added to the applications menu: {path}"),
+    "desktop_comment": ("Interface web para a rede Meshtastic", "Web interface for the Meshtastic network"),
+    "desktop_moved": ("Se mudar a pasta do MeshDeckWeb de sítio, corra o instalador outra vez para o ícone a acompanhar.",
+                      "If you move the MeshDeckWeb folder, run the installer again so the icon follows it."),
 }
 
 lang = "en"
@@ -382,11 +394,114 @@ def write_launcher(flags):
     print("\n" + t("launcher", path=os.path.basename(LAUNCHER)))
 
 
+# ── ícone no menu de aplicações (Linux) ──────────────────────────────────────
+
+def desktop_supported() -> bool:
+    """Linux com um ambiente gráfico que abra URLs (o xdg-open vem com ele)."""
+    return sys.platform.startswith("linux") and shutil.which("xdg-open") is not None
+
+
+def applications_dir() -> str:
+    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "applications")
+
+
+def desktop_script(port: int, log_path: str) -> str:
+    """O script que o ícone corre.
+
+    Arranca o servidor só se a porta ainda não responder (o ícone pode ser
+    carregado com o servidor já a correr, de um terminal ou de um clique
+    anterior), espera que responda e abre o browser em localhost: no próprio
+    aparelho não é preciso HTTPS, e assim não aparece o aviso do certificado.
+    Fechar o browser não pára o servidor; os outros dispositivos continuam
+    ligados. "stop" pára o servidor desta pasta, e só esse: confirma pela
+    pasta de trabalho do processo.
+    """
+    return f'''#!/bin/sh
+# Ícone do MeshDeckWeb no menu de aplicações (criado pelo install.py).
+#   start-desktop.sh        arranca o servidor, se preciso, e abre o browser
+#   start-desktop.sh stop   pára o servidor desta pasta
+cd "$(dirname "$0")"
+ROOT="$(pwd -P)"
+PORT={port}
+LOG="{log_path}"
+
+up() {{
+    .venv/bin/python -c "import socket, sys; s = socket.socket(); s.settimeout(1); sys.exit(s.connect_ex(('127.0.0.1', $PORT)))"
+}}
+
+if [ "$1" = "stop" ]; then
+    # Só o processo do servidor (um python a correr run_server.py), nunca
+    # uma shell ou um grep que tenha "run_server.py" no comando.
+    for pid in $(pgrep -f '^[^ ]*python[0-9.]* ([^ ]*/)?run_server\.py( |$)'); do
+        [ "$(readlink "/proc/$pid/cwd")" = "$ROOT" ] && kill "$pid"
+    done
+    exit 0
+fi
+
+if ! up; then
+    mkdir -p "$(dirname "$LOG")"
+    # O log cresce a cada arranque: acima de 5 MB fica só o último 1 MB.
+    if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 5000000 ]; then
+        tail -c 1000000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+    fi
+    echo "--- $(date) ---" >> "$LOG"
+    nohup ./start.sh >> "$LOG" 2>&1 &
+    tries=0
+    while ! up && [ $tries -lt {SERVER_WAIT_S * 2} ]; do
+        sleep 0.5
+        tries=$((tries + 1))
+    done
+fi
+exec xdg-open "http://localhost:$PORT/"
+'''
+
+
+def desktop_entry(root: str) -> str:
+    """Entrada do menu de aplicações. Para parar o servidor há o ☰ → Parar o
+    servidor no browser desta máquina, ou start-desktop.sh stop no terminal
+    (o menu do Raspberry Pi OS não mostra acções no botão direito)."""
+    script = os.path.join(root, DESKTOP_SCRIPT)
+    icon = os.path.join(root, "web", "img", "logo.svg")
+    return "\n".join([
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=MeshDeckWeb",
+        "GenericName=Meshtastic",
+        f"Comment={t('desktop_comment')}",
+        f'Exec="{script}"',
+        f"Icon={icon}",
+        "Terminal=false",
+        "StartupNotify=false",
+        # "Utility" é a categoria que os menus mostram como Acessórios.
+        "Categories=Utility;",
+        "",
+    ])
+
+
+def write_desktop_entry(port: int, log_path: str, root: str = ROOT, apps_dir: str = None) -> str:
+    """Escreve o script do ícone na pasta do projecto e o .desktop no menu
+    de aplicações do utilizador (sem sudo). Devolve o caminho do .desktop."""
+    script = os.path.join(root, DESKTOP_SCRIPT)
+    with open(script, "w") as fh:
+        fh.write(desktop_script(port, log_path))
+    os.chmod(script, 0o755)
+    apps_dir = apps_dir or applications_dir()
+    os.makedirs(apps_dir, exist_ok=True)
+    path = os.path.join(apps_dir, DESKTOP_FILE)
+    with open(path, "w") as fh:
+        fh.write(desktop_entry(root))
+    if shutil.which("update-desktop-database"):
+        subprocess.call(["update-desktop-database", apps_dir],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return path
+
+
 def stage_configure(chosen_lang):
     global lang
     lang = chosen_lang
     sys.path.insert(0, ROOT)
-    from core.settings import settings
+    from core.settings import config_dir, settings
     from server import tls
     from server.auth import ServerConfig
 
@@ -409,6 +524,10 @@ def stage_configure(chosen_lang):
     print(t("map_info"))
     config.set_tile_cache_mb(ask_int(t("ask_map_mb"), config.tile_cache_mb, 0, 100000))
     write_launcher(flags)
+    if desktop_supported() and ask_yes(t("ask_desktop"), default=True):
+        entry = write_desktop_entry(port, os.path.join(config_dir(), "server.log"))
+        print(t("desktop_ok", path=entry))
+        print(t("desktop_moved"))
 
     hosts = (tls.local_addresses() or ["<ip>"]) if network else ["127.0.0.1"]
     run = "start.bat" if WINDOWS else "./start.sh"

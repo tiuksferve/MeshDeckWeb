@@ -1080,6 +1080,18 @@ _STRINGS: dict = {
     "🗑 Limpar NodeDB do nó": {"pt": "🗑 Limpar NodeDB do nó", "en": "🗑 Clear the node's NodeDB"},
     "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.": {"pt": "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.", "en": "Clear the node's NodeDB? The node list stored on the node is erased and fills up again as nodes are heard. Favourite nodes are kept."},
     "🗑 NodeDB do nó limpa.": {"pt": "🗑 NodeDB do nó limpa.", "en": "🗑 The node's NodeDB was cleared."},
+    "Servidor": {"pt": "Servidor", "en": "Server"},
+    "⏹ Parar o servidor": {"pt": "⏹ Parar o servidor", "en": "⏹ Stop the server"},
+    "Parar o servidor? A ligação ao nó e a gravação das métricas param, e os outros dispositivos deixam de o ver. Para o voltar a arrancar, use o ícone MeshDeckWeb no menu de aplicações.":
+        {"pt": "Parar o servidor? A ligação ao nó e a gravação das métricas param, e os outros dispositivos deixam de o ver. Para o voltar a arrancar, use o ícone MeshDeckWeb no menu de aplicações.",
+         "en": "Stop the server? The node connection and the metrics recording stop, and your other devices lose it too. To start it again, use the MeshDeckWeb icon in the applications menu."},
+    "Não foi possível parar o servidor.": {"pt": "Não foi possível parar o servidor.", "en": "Could not stop the server."},
+    "Só se pode parar o servidor na própria máquina.": {"pt": "Só se pode parar o servidor na própria máquina.",
+                                                       "en": "The server can only be stopped on its own machine."},
+    "Servidor parado.": {"pt": "Servidor parado.", "en": "Server stopped."},
+    "Já pode fechar esta janela. Para voltar, abra o MeshDeckWeb no menu de aplicações.":
+        {"pt": "Já pode fechar esta janela. Para voltar, abra o MeshDeckWeb no menu de aplicações.",
+         "en": "You can close this window now. To come back, open MeshDeckWeb from the applications menu."},
     "Disponível com o nó ligado": {"pt": "Disponível com o nó ligado", "en": "Available once the node is connected"},
     "🔔 Ligado": {"pt": "🔔 Ligado", "en": "🔔 On"},
     "🔕 Desligado": {"pt": "🔕 Desligado", "en": "🔕 Off"},

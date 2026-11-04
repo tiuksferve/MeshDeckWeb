@@ -103,3 +103,116 @@ def test_banner_warns_when_the_certificate_misses_the_new_ip(config, tmp_path, m
     monkeypatch.setattr(tls, "local_addresses", lambda: ["192.168.1.155"])
     auth.announce_first_run(config, "0.0.0.0", 8080)
     assert "does not include" not in capsys.readouterr().out
+
+
+# ── ícone no menu de aplicações (Linux) ──────────────────────────────────────
+
+FAKE_SERVER = """\
+import socket, sys, time
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", int(sys.argv[1])))
+s.listen()
+open("started", "a").write("x")
+while True:
+    time.sleep(1)
+"""
+
+
+def free_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture
+def desktop_root(tmp_path, monkeypatch):
+    """Pasta de projecto falsa: o start.sh arranca um "run_server.py" que só
+    escuta na porta, e o xdg-open apenas regista o endereço que recebeu."""
+    if not sys.platform.startswith("linux"):
+        pytest.skip("o ícone só existe em Linux")
+    root = tmp_path / "MeshDeckWeb"
+    (root / ".venv" / "bin").mkdir(parents=True)
+    os.symlink(sys.executable, root / ".venv" / "bin" / "python")
+    port = free_port()
+    (root / "run_server.py").write_text(FAKE_SERVER)
+    (root / "start.sh").write_text(f'#!/bin/sh\ncd "$(dirname "$0")"\nexec .venv/bin/python run_server.py {port}\n')
+    os.chmod(root / "start.sh", 0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "xdg-open").write_text(f'#!/bin/sh\necho "$1" >> "{tmp_path}/opened"\n')
+    os.chmod(bin_dir / "xdg-open", 0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(install, "lang", "pt")
+    entry = install.write_desktop_entry(port, str(tmp_path / "logs" / "server.log"),
+                                        root=str(root), apps_dir=str(tmp_path / "apps"))
+    yield {"root": root, "port": port, "entry": entry, "tmp": tmp_path}
+    install_stop = root / install.DESKTOP_SCRIPT
+    import subprocess
+    subprocess.call([str(install_stop), "stop"])
+
+
+def run_icon(env, *args):
+    import subprocess
+    return subprocess.run([str(env["root"] / install.DESKTOP_SCRIPT), *args], timeout=30)
+
+
+def test_desktop_entry_points_at_the_script_and_the_logo(desktop_root):
+    text = open(desktop_root["entry"]).read()
+    root = desktop_root["root"]
+    assert f'Exec="{root}/{install.DESKTOP_SCRIPT}"' in text
+    assert f"Icon={root}/web/img/logo.svg" in text
+    assert "Terminal=false" in text
+    assert "Categories=Utility;" in text      # Acessórios no menu
+    assert f'Exec="{root}/{install.DESKTOP_SCRIPT}" stop' not in text
+    # Parar fica no ☰ da página; o menu de aplicações só tem esta entrada.
+    entries = [f for f in os.listdir(os.path.dirname(desktop_root["entry"])) if f.endswith(".desktop")]
+    assert entries == [install.DESKTOP_FILE]
+
+
+def test_icon_starts_the_server_once_and_opens_the_browser(desktop_root):
+    env = desktop_root
+    assert run_icon(env).returncode == 0
+    url = f"http://localhost:{env['port']}/"
+    assert (env["tmp"] / "opened").read_text().split() == [url], "o browser abriu antes de o servidor responder"
+    assert (env["root"] / "started").read_text() == "x"
+    # Segundo clique, com o servidor a correr: só abre o browser.
+    assert run_icon(env).returncode == 0
+    assert (env["root"] / "started").read_text() == "x", "arrancou um segundo servidor"
+    assert (env["tmp"] / "opened").read_text().split() == [url, url]
+    assert "---" in (env["tmp"] / "logs" / "server.log").read_text()
+
+
+def test_icon_stop_stops_only_this_folders_server(desktop_root):
+    import socket
+    import subprocess
+    import time
+    env = desktop_root
+    run_icon(env)
+    # Um processo na mesma pasta com "run_server.py" no comando (uma shell, um
+    # grep) não é o servidor. A primeira versão do stop matava-o.
+    bystander = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "run_server.py"],
+                                 cwd=env["root"])
+    try:
+        assert run_icon(env, "stop").returncode == 0
+        time.sleep(0.3)
+        assert bystander.poll() is None, "o stop matou um processo que não era o servidor"
+    finally:
+        bystander.kill()
+    for _ in range(50):
+        with socket.socket() as s:
+            if s.connect_ex(("127.0.0.1", env["port"])) != 0:
+                return
+        time.sleep(0.1)
+    pytest.fail("o servidor continuou a correr depois de 'stop'")
+
+
+def test_desktop_step_only_on_linux_with_xdg_open(monkeypatch):
+    monkeypatch.setattr(install.sys, "platform", "darwin")
+    assert not install.desktop_supported()
+    monkeypatch.setattr(install.sys, "platform", "linux")
+    monkeypatch.setattr(install.shutil, "which", lambda name: None)
+    assert not install.desktop_supported()
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/xdg-open")
+    assert install.desktop_supported()
