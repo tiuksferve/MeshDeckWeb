@@ -33,6 +33,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Your own node on the map** has its own label, `🏠` and its short name in
+  gold, always on top and never inside a group. When the NodeDB has no
+  position for it, the position from the node's own GPS is used.
+- **Channel messages that nobody was heard relaying** show
+  "⚠ sent, not confirmed" (orange) instead of "✗ failed (MAX_RETRANSMIT)". A
+  broadcast has no recipient to acknowledge it: the node only counts it as
+  delivered when it hears another node repeat it, and gives up after three
+  tries even when the message did arrive (a CLIENT_MUTE node nearby receives
+  it but does not repeat it). Direct messages keep "✗ failed", since there
+  a missing ACK is a real failure.
 - **Nodes on the map are labels with their short name** instead of small
   dots, in the same state colours (selected, packet just received, RF, MQTT,
   inactive). The selected node and the one that just spoke sit on top;

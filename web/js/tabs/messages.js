@@ -229,6 +229,10 @@ function transportLabel(entry) {
 function statusLabel(entry) {
   if (!entry.outgoing) return '';
   if (entry.status === 'ack' || entry.status === 'ack_implicit') return `<span class="status ack">${t('✓ entregue')}</span>`;
+  if (entry.status === 'unconfirmed') {
+    return `<span class="status unconfirmed" title="${escapeHtml(t('Nenhum nó foi ouvido a retransmiti-la; pode ter chegado na mesma.'))}">${
+      t('⚠ enviada, sem confirmação')}</span>`;
+  }
   if (entry.status === 'nak') return `<span class="status nak">${t('✗ falhou')}${entry.status_detail ? ` (${escapeHtml(entry.status_detail)})` : ''}</span>`;
   return `<span class="status sending">${t('… a enviar')}</span>`;
 }

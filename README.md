@@ -55,7 +55,8 @@ well on a desktop browser.
 - Each node is a label with its short name, coloured by state — selected,
   packet just received, RF active, MQTT, inactive (>2 h) — with the colour
   legend in each node's popup, and easy to tap on a phone; overlapping nodes
-  are grouped into a circle with the count, which opens on tap
+  are grouped into a circle with the count, which opens on tap; your own
+  node is a gold `🏠` label, always visible
 - Traceroutes with per-segment SNR, NeighborInfo links
 - On phones, the theme and traceroute list open as a sheet over the map
 

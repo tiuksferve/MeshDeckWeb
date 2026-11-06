@@ -55,7 +55,8 @@ igualmente bem num browser de computador.
 - Cada nó é uma etiqueta com o nome curto, colorida por estado — seleccionado,
   pacote acabado de receber, RF activo, MQTT, inactivo (>2 h) — com a legenda
   da cor no popup de cada nó, e fácil de tocar no telemóvel; nós sobrepostos
-  juntam-se num círculo com o número, que se abre ao tocar
+  juntam-se num círculo com o número, que se abre ao tocar; o seu próprio
+  nó é uma etiqueta dourada `🏠`, sempre à vista
 - Traceroutes com SNR por segmento, ligações NeighborInfo
 - No telemóvel, o tema e a lista de traceroutes abrem numa folha sobre o mapa
 

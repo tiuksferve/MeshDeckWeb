@@ -137,14 +137,24 @@ class MessageStore:
 
     def update_status(self, packet_id: int, status: str,
                       error_reason: str = "") -> Optional[dict]:
-        """Marca ACK/NAK na mensagem enviada. Devolve a entrada actualizada."""
+        """Marca ACK/NAK na mensagem enviada. Devolve a entrada actualizada.
+
+        Numa mensagem de canal, MAX_RETRANSMIT não é uma falha: em broadcast
+        não há destinatário que confirme, e o nó só a dá como entregue se
+        ouvir outro nó a retransmiti-la. Sem isso desiste ao fim de 3 envios,
+        mas a mensagem saiu e pode ter chegado (um CLIENT_MUTE ao lado recebe-a
+        e não a repete). Fica "unconfirmed" em vez de "nak". Numa DM a falta
+        de ACK é mesmo uma falha.
+        """
         with self._lock:
             entry = self._pending_ack.get(packet_id)
             if entry is None:
                 return None
+            if status == "nak" and error_reason == "MAX_RETRANSMIT" and not entry.get("direct"):
+                status = "unconfirmed"
             entry["status"] = status
             entry["status_detail"] = error_reason or ""
-            if status in ("ack", "ack_implicit", "nak"):
+            if status in ("ack", "ack_implicit", "nak", "unconfirmed"):
                 self._pending_ack.pop(packet_id, None)
             return dict(entry)
 

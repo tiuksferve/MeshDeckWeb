@@ -1081,6 +1081,11 @@ _STRINGS: dict = {
     "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.": {"pt": "Limpar a NodeDB do nó? A lista de nós guardada no nó é apagada e volta a encher-se à medida que os nós forem ouvidos. Os nós favoritos ficam.", "en": "Clear the node's NodeDB? The node list stored on the node is erased and fills up again as nodes are heard. Favourite nodes are kept."},
     "🗑 NodeDB do nó limpa.": {"pt": "🗑 NodeDB do nó limpa.", "en": "🗑 The node's NodeDB was cleared."},
     "Servidor": {"pt": "Servidor", "en": "Server"},
+    "O meu nó": {"pt": "O meu nó", "en": "My node"},
+    "⚠ enviada, sem confirmação": {"pt": "⚠ enviada, sem confirmação", "en": "⚠ sent, not confirmed"},
+    "Nenhum nó foi ouvido a retransmiti-la; pode ter chegado na mesma.":
+        {"pt": "Nenhum nó foi ouvido a retransmiti-la; pode ter chegado na mesma.",
+         "en": "No node was heard relaying it; it may have arrived anyway."},
     "⏹ Parar o servidor": {"pt": "⏹ Parar o servidor", "en": "⏹ Stop the server"},
     "Parar o servidor? A ligação ao nó e a gravação das métricas param, e os outros dispositivos deixam de o ver. Para o voltar a arrancar, use o ícone MeshDeckWeb no menu de aplicações.":
         {"pt": "Parar o servidor? A ligação ao nó e a gravação das métricas param, e os outros dispositivos deixam de o ver. Para o voltar a arrancar, use o ícone MeshDeckWeb no menu de aplicações.",

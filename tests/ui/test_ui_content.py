@@ -33,6 +33,20 @@ def test_direct_message_has_its_own_conversation(page):
                   message="a DM não aparece na conversa do remetente")
 
 
+def test_channel_message_without_relay_shows_unconfirmed(page, ui_server):
+    """O caminho real: o nó responde MAX_RETRANSMIT a uma mensagem de canal
+    e a página mostra "enviada, sem confirmação" em vez de "falhou"."""
+    mesh = ui_server["mesh"]
+    open_conversation(page, "ch:0")
+    mesh._on_channel_message_sent(0, "Ninguém repetiu", 0x7777)
+    page.wait_for("document.getElementById('conv-view').innerText.includes('Ninguém repetiu')")
+    mesh._on_message_status(0x7777, "nak", "MAX_RETRANSMIT")
+    page.wait_for("document.querySelector('#conv-view .status.unconfirmed')?.innerText"
+                  ".includes('sent, not confirmed')",
+                  message="a mensagem de canal sem retransmissão apareceu como falhada")
+    assert "failed" not in page.text("#conv-view .status.unconfirmed")
+
+
 def test_reply_shows_and_cancels_the_reply_banner(page):
     open_conversation(page, "ch:0")
     page.wait_for("document.querySelector('#conv-view .reply-btn')", message="sem botão ↩ nas mensagens")
