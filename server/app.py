@@ -15,6 +15,8 @@ import contextlib
 import logging
 import secrets
 import os
+import signal
+import threading
 from datetime import timedelta
 
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory, session
@@ -39,6 +41,24 @@ logger = logging.getLogger("MeshDeck.app")
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 SESSION_LIFETIME = timedelta(days=7)
+LOOPBACK = ("127.0.0.1", "::1")
+STOP_DELAY_S = 0.5                  # a resposta sai antes de o processo terminar
+
+
+def is_local_request() -> bool:
+    """O browser corre na própria máquina do servidor (o ícone do uConsole).
+
+    Só daqui se pode parar o servidor: de outro aparelho não haveria como o
+    voltar a arrancar. Não há proxy à frente, por isso o remote_addr é o real.
+    """
+    return request.remote_addr in LOOPBACK
+
+
+def stop_this_process():
+    """Pára o servidor como o Ctrl+C ou o "Parar" do menu de aplicações: o
+    SIGTERM passa pelo encerramento do run_server.py, que grava o histórico
+    das métricas e fecha a ligação ao nó."""
+    threading.Timer(STOP_DELAY_S, os.kill, (os.getpid(), signal.SIGTERM)).start()
 
 
 def config_defs_json() -> list:
@@ -226,7 +246,20 @@ def create_app(config: ServerConfig = None) -> tuple:
                         "app": APP_NAME,
                         "language": request_language(),
                         # Porta HTTPS, para a página em HTTP indicar onde a bússola funciona.
-                        "https_port": config.https_port if config.tls_enabled else None})
+                        "https_port": config.https_port if config.tls_enabled else None,
+                        # Browser na própria máquina: o menu mostra "Parar o servidor".
+                        "local": is_local_request()})
+
+    app.stop_server = stop_this_process     # os testes trocam-no
+
+    @app.post("/api/server/stop")
+    @login_required
+    def api_server_stop():
+        if not is_local_request():
+            return jsonify({"error": tr("Só se pode parar o servidor na própria máquina.")}), 403
+        logger.info("servidor parado a pedido do browser local")
+        app.stop_server()
+        return jsonify({"ok": True})
 
     # ------------------------------------------------------------------
     # Estado e recursos pedidos pontualmente

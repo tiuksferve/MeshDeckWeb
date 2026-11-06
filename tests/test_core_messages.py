@@ -143,6 +143,25 @@ def test_nak_carries_the_reason(store):
     assert updated["status_detail"] == "NO_ROUTE"
 
 
+def test_channel_message_without_relay_is_unconfirmed_not_failed(store):
+    # Em broadcast, MAX_RETRANSMIT só quer dizer que ninguém foi ouvido a repetir.
+    store.add_outgoing_channel(1, "Teste", packet_id=0x444)
+    updated = store.update_status(0x444, "nak", "MAX_RETRANSMIT")
+    assert updated["status"] == "unconfirmed"
+    assert updated["status_detail"] == "MAX_RETRANSMIT"
+    assert store.update_status(0x444, "ack") is None           # já resolvida
+
+
+def test_dm_without_ack_is_still_a_failure(store):
+    store.add_outgoing_dm("!6758b9ff", "olá", packet_id=0x555)
+    assert store.update_status(0x555, "nak", "MAX_RETRANSMIT")["status"] == "nak"
+
+
+def test_channel_message_other_errors_still_fail(store):
+    store.add_outgoing_channel(0, "x", packet_id=0x666)
+    assert store.update_status(0x666, "nak", "NO_CHANNEL")["status"] == "nak"
+
+
 def test_status_for_unknown_packet_is_ignored(store):
     assert store.update_status(0x999, "ack") is None
 

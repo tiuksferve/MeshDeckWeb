@@ -5,7 +5,7 @@ satélite, mapa offline, painel lateral no telemóvel) e o 📍 da navegação.
 
 import time
 
-from tests.ui.conftest import node_id
+from tests.ui.conftest import LOCAL_ID, node_id
 
 # Nós no mapa: os soltos e os que estão dentro de um grupo (o círculo traz o número).
 MARKERS = ("document.querySelectorAll('#map-canvas .map-node-pill').length"
@@ -73,15 +73,35 @@ def test_focusing_a_grouped_node_opens_its_group(page):
     # Um nó que está dentro de um grupo na vista inicial.
     grouped = page.js("""(() => {
       const shown = new Set([...document.querySelectorAll('#map-canvas .map-node-pill')].map((p) => p.textContent));
-      return ['BL', 'EN1', 'SNT'].find((n) => !shown.has(n));
+      return ['EN1', 'SNT', 'CSC', 'ALM'].find((n) => !shown.has(n));
     })()""")
     assert grouped, "nenhum dos nós esperados está agrupado"
-    target = {"BL": node_id(0), "EN1": node_id(1), "SNT": node_id(2)}[grouped]
+    # O BL (nó local) nunca está num grupo, por isso não entra.
+    target = {"EN1": node_id(1), "SNT": node_id(2), "CSC": node_id(3), "ALM": node_id(4)}[grouped]
     page.js(f"import('/js/tabs/map.js').then((m) => m.focusNode('{target}'))")
     page.wait_for("document.querySelector('.leaflet-popup-content')",
                   message="o popup de um nó agrupado não abriu")
     assert page.js(f"[...document.querySelectorAll('#map-canvas .map-node-pill')]"
                    f".some((p) => p.textContent === {grouped!r})"), "o grupo não se abriu"
+
+
+def test_local_node_has_its_own_label_and_never_groups(page):
+    open_map(page)
+    # Na vista inicial há grupos, mas o nó local (BL) fica sempre à vista.
+    page.wait_for(f"{CLUSTERS} > 0")
+    assert page.js("document.querySelector('#map-canvas .map-node-local')?.textContent") == "🏠 BL"
+    assert page.js(MARKERS) == WITH_GPS
+
+
+def test_local_node_shows_from_its_own_gps_when_the_nodedb_has_no_position(page):
+    open_map(page)
+    page.js(f"""import('/js/store.js').then(({{ store }}) => {{
+      const local = store.nodes.get('{LOCAL_ID}');
+      local.latitude = null; local.longitude = null;
+      store.applyLocalPosition({{ lat: 38.75, lon: -9.2, alt: 50, found: true }});
+    }})""")
+    page.wait_for("document.querySelector('#map-canvas .map-node-local')?.textContent === '🏠 BL'",
+                  message="sem posição na NodeDB, o nó local não apareceu com a do GPS")
 
 
 def test_tapping_a_marker_selects_the_node_and_keeps_the_popup(page):

@@ -253,6 +253,7 @@ tbody tr:hover td { background: var(--input); }
   padding: 3px 5px; border: 2px solid; border-radius: 9px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .55); text-shadow: 0 1px 1px rgba(0, 0, 0, .45);
 }
+.map-node-local { color: #2b1d00; text-shadow: none; font-size: 12px; padding: 4px 6px; }
 .map-node-inactive { color: #ddd; font-size: 10px; padding: 2px 4px; opacity: .8; }
 .map-node-active, .map-node-selected { font-size: 12px; padding: 4px 6px; }
 /* Grupo de nós sobrepostos (ver clusterIcon em map.js); toca-se para aproximar. */
@@ -329,6 +330,7 @@ tbody tr:hover td { background: var(--input); }
 .msg .status { font-size: 10px; margin-top: 2px; }
 .msg .status.ack { color: var(--green); }
 .msg .status.nak { color: var(--red); }
+.msg .status.unconfirmed { color: var(--orange); }
 .msg .status.sending { color: var(--muted); }
 .date-sep { text-align: center; color: var(--muted); font-size: 11px; margin: 6px 0; }
 

@@ -9,7 +9,7 @@
 
 import { api, postJSON, getJSON } from './api.js';
 import { store } from './store.js';
-import { connectSocket, commands } from './socket.js';
+import { connectSocket, commands, disconnectSocket } from './socket.js';
 import { connectionLabel, debounce, escapeHtml, MOBILE_QUERY, nodeBadge } from './utils.js';
 import { getLanguage, loadLanguage, preferredLanguage, rememberLanguage, t } from './i18n.js';
 
@@ -40,6 +40,7 @@ let activeTab = 'nodes';
 async function boot() {
   const { data } = await api('/api/whoami');
   store.httpsPort = data.https_port || null;   // HTTPS ao lado, para a bússola
+  store.localClient = Boolean(data.local);     // browser na máquina do servidor
   // A língua é deste dispositivo; o cookie vai antes de qualquer pedido que
   // devolva texto traduzido no servidor (e antes do Socket.IO).
   const lang = preferredLanguage();
@@ -182,6 +183,7 @@ function wireHeader() {
   wireMenu();
   wireSound();
   wireNodeActions();
+  wireServerActions();
   $('btn-console').addEventListener('click', () => { closeMenu(); $('console-drawer').hidden = false; });
   $('console-close').addEventListener('click', () => { $('console-drawer').hidden = true; });
 
@@ -319,6 +321,25 @@ function renderNodeActions() {
     $(id).disabled = !ready;
     $(id).title = ready ? '' : t('Disponível com o nó ligado');
   }
+}
+
+/* Parar o servidor: só aparece no browser da própria máquina (no uConsole,
+   aberto pelo ícone). De outro aparelho não haveria como o voltar a
+   arrancar, e o servidor recusa o pedido na mesma. */
+function wireServerActions() {
+  $('server-actions').hidden = !store.localClient;
+  $('btn-stop-server').addEventListener('click', async () => {
+    closeMenu();
+    if (!confirm(t('Parar o servidor? A ligação ao nó e a gravação das métricas param, e os outros dispositivos deixam de o ver. Para o voltar a arrancar, use o ícone MeshDeckWeb no menu de aplicações.'))) return;
+    const result = await postJSON('/api/server/stop', {});
+    if (!result.ok) {
+      showToast(result.data.error || t('Não foi possível parar o servidor.'));
+      return;
+    }
+    disconnectSocket();      // sem isto a página tentava religar-se sem parar
+    $('app').hidden = true;
+    $('stopped').hidden = false;
+  });
 }
 
 /* Som de mensagens: preferência deste dispositivo. Ao ligar toca uma

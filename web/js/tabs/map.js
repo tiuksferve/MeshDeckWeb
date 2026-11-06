@@ -46,6 +46,7 @@ let map = null;
 let tileLayer = null;
 let overlayLayers = [];        // nomes/estradas por cima do satélite
 let markerLayer = null;        // L.markerClusterGroup
+let localLayer = null;         // o nó local, sempre à vista, fora dos grupos
 const markers = new Map();          // id_string -> L.marker com etiqueta
 let traceLayer = null;
 let neighborLayer = null;
@@ -82,6 +83,9 @@ export function mount() {
   });
 
   store.on('nodes-changed', drawMarkers);
+  // O nó local pode só ter a posição do próprio GPS (fora da NodeDB).
+  store.on('local-node-changed', drawMarkers);
+  store.on('local-position-changed', drawMarkers);
   store.on('language-changed', renderTraceList);
   setInterval(renderTraceList, 60_000);   // "há 5 min" envelhece
   store.on('selection-changed', onSelectionChanged);
@@ -116,20 +120,30 @@ export function focusNode(nodeId) {
   const marker = markers.get(nodeId);
   // Dentro de um grupo, o marcador não está no mapa: aproxima ou abre o
   // grupo até ele aparecer, e só então abre o popup.
-  if (marker) markerLayer.zoomToShowLayer(marker, () => marker.openPopup());
+  if (marker) revealMarker(marker, () => marker.openPopup());
 }
 
 /* Centra e, se o nó estiver dentro de um grupo, abre-o até ele aparecer. */
 function showNode(nodeId) {
   if (!centerOn(nodeId)) return;
   const marker = markers.get(nodeId);
-  if (marker) markerLayer.zoomToShowLayer(marker, () => {});
+  if (marker) revealMarker(marker, () => {});
+}
+
+/* Um marcador dentro de um grupo só aparece depois de o abrir; o do nó
+   local não está em grupo nenhum. */
+function revealMarker(marker, done) {
+  if (marker.layer === markerLayer) markerLayer.zoomToShowLayer(marker, done);
+  else done();
 }
 
 function centerOn(nodeId) {
   const node = store.nodes.get(nodeId);
-  if (!node || node.latitude == null || node.longitude == null) return false;
-  map.setView([node.latitude, node.longitude], Math.max(map.getZoom(), 13), { animate: false });
+  // O nó local pode estar no mapa só com a posição do GPS (ver nodesWithPosition).
+  const latLng = node?.latitude != null && node?.longitude != null
+    ? [node.latitude, node.longitude] : markers.get(nodeId)?.getLatLng();
+  if (!latLng) return false;
+  map.setView(latLng, Math.max(map.getZoom(), 13), { animate: false });
   return true;
 }
 
@@ -159,6 +173,7 @@ function initMap() {
     spiderfyOnMaxZoom: true,        // nós na mesma posição abrem em leque
     iconCreateFunction: clusterIcon,
   }).addTo(map);
+  localLayer = L.layerGroup().addTo(map);
   map.getContainer().addEventListener('click', (event) => {
     const btn = event.target.closest('.popup-traceroute');
     if (btn) requestTraceroute(btn.dataset.id);
@@ -197,6 +212,7 @@ const MARKER_STATES = {
   inactive: { key: 'inactive', color: '#444455', fill: '#555566', label: 'Inactivo (>2h)' },
   mqtt:     { key: 'mqtt',     color: '#cc6600', fill: '#ff8800', label: 'MQTT' },
   rf:       { key: 'rf',       color: '#1050aa', fill: '#2b7cd3', label: 'RF activo' },
+  local:    { key: 'local',    color: '#9e6a03', fill: '#e3b341', label: 'O meu nó' },
 };
 
 // A caixa do marcador é maior do que a etiqueta e transparente: é a área que
@@ -206,7 +222,13 @@ const HIT_W = 56;
 const HIT_H = 44;
 
 function markerLabel(node) {
-  return node.short_name || node.id_string.replace(/^!/, '').slice(-4);
+  const name = node.short_name || node.id_string.replace(/^!/, '').slice(-4);
+  return isLocalNode(node) ? `🏠 ${name}` : name;
+}
+
+function isLocalNode(node) {
+  const localId = (store.localNode?.node_id || '').toLowerCase();
+  return node.is_local === true || (localId !== '' && node.id_string.toLowerCase() === localId);
 }
 
 function markerIcon(node, style) {
@@ -242,11 +264,12 @@ function clusterIcon(cluster) {
 
 // Ordem de sobreposição: o seleccionado por cima de tudo, depois o nó que
 // acabou de falar; os inactivos ficam por baixo dos outros.
-const Z_OFFSET = { selected: 3000, active: 2000, rf: 1000, mqtt: 1000, inactive: 0 };
+const Z_OFFSET = { selected: 3000, local: 2500, active: 2000, rf: 1000, mqtt: 1000, inactive: 0 };
 
 /* Estado do nó sem contar com a selecção: é a cor que o ponto tem quando
    não está seleccionado, e a que o popup explica. */
 function baseState(node) {
+  if (isLocalNode(node)) return MARKER_STATES.local;
   const isActiveNow = node.id_string.toLowerCase() === lastActiveId;
   const isInactive = node.last_heard == null || (Date.now() / 1000 - node.last_heard) > ONLINE_WINDOW_S;
   if (isActiveNow) return MARKER_STATES.active;
@@ -305,12 +328,31 @@ function tooltipText(node) {
     node.via_mqtt === true ? '☁ MQTT' : 'RF'} · SNR ${fmtNum(node.snr)}`;
 }
 
+/* Os nós com posição. O nó local entra também quando a NodeDB não tem a
+   posição dele mas o GPS do próprio nó tem (store.localPosition), e mesmo
+   que ainda não esteja na lista de nós. */
+function nodesWithPosition() {
+  const list = store.nodeList().filter((n) => !isLocalNode(n) && n.latitude != null && n.longitude != null);
+  const localId = store.localNode?.node_id;
+  if (!localId) return list;
+  const record = store.nodes.get(localId.toLowerCase()) || store.nodes.get(localId);
+  const local = { ...(record || {}), id_string: record?.id_string || localId, is_local: true,
+                  short_name: record?.short_name || store.localNode.short_name,
+                  long_name: record?.long_name || store.localNode.long_name };
+  const gps = store.localPosition || {};
+  if (local.latitude == null && gps.found && gps.lat != null) {
+    local.latitude = gps.lat;
+    local.longitude = gps.lon;
+  }
+  if (local.latitude != null && local.longitude != null) list.push(local);
+  return list;
+}
+
 function drawMarkers() {
   if (!initialized) return;
   const seen = new Set();
   const changed = [];
-  const nodesLoc = store.nodeList().filter((n) => n.latitude != null && n.longitude != null);
-  for (const node of nodesLoc) {
+  for (const node of nodesWithPosition()) {
     const id = node.id_string;
     const style = markerStyle(node);
     const latLng = [node.latitude, node.longitude];
@@ -327,7 +369,9 @@ function drawMarkers() {
       marker.on('popupopen', () => marker.closeTooltip());
       marker.iconKey = `${style.key}|${markerLabel(node)}`;
       marker.stateKey = style.key;
-      markerLayer.addLayer(marker);
+      // O nó local fica sempre à vista: nunca entra num grupo.
+      marker.layer = isLocalNode(node) ? localLayer : markerLayer;
+      marker.layer.addLayer(marker);
       markers.set(id, marker);
     } else if (!marker.getLatLng().equals(latLng)) {
       marker.setLatLng(latLng);
@@ -340,7 +384,7 @@ function drawMarkers() {
       marker.setZIndexOffset(Z_OFFSET[style.key]);
       marker.iconKey = icon;
       // A cor do grupo depende do estado dos nós lá dentro.
-      if (marker.stateKey !== style.key) changed.push(marker);
+      if (marker.stateKey !== style.key && marker.layer === markerLayer) changed.push(marker);
       marker.stateKey = style.key;
     }
     marker.setTooltipContent(tooltipText(node));
@@ -353,7 +397,7 @@ function drawMarkers() {
     }
   }
   for (const [id, marker] of markers) {
-    if (!seen.has(id)) { markerLayer.removeLayer(marker); markers.delete(id); }
+    if (!seen.has(id)) { marker.layer.removeLayer(marker); markers.delete(id); }
   }
   if (changed.length) markerLayer.refreshClusters(changed);
   drawNeighborLines();

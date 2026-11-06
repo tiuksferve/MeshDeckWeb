@@ -28,6 +28,14 @@
   </form>
 </div>
 
+<!-- Depois de "Parar o servidor": a página já não tem com quem falar. -->
+<div id="stopped" class="overlay" hidden>
+  <div class="card">
+    <h1 class="brand-title"><img src="/img/logo-mark.svg" alt="" class="brand-logo"> <span data-i18n="Servidor parado.">Servidor parado.</span></h1>
+    <p class="muted" data-i18n="Já pode fechar esta janela. Para voltar, abra o MeshDeckWeb no menu de aplicações.">Já pode fechar esta janela. Para voltar, abra o MeshDeckWeb no menu de aplicações.</p>
+  </div>
+</div>
+
 <!-- Modal de ligação ao nó: TCP ou USB serial via ponte. -->
 <div id="connect-modal" class="overlay" hidden>
   <form id="connect-form" class="card">
@@ -91,6 +99,12 @@
                 data-i18n="📍 Enviar a minha posição">📍 Enviar a minha posição</button>
         <button type="button" id="btn-reset-nodedb" class="menu-item danger" role="menuitem" disabled
                 data-i18n="🗑 Limpar NodeDB do nó">🗑 Limpar NodeDB do nó</button>
+        <!-- Só no browser da própria máquina do servidor (o ícone do uConsole). -->
+        <div id="server-actions" hidden>
+          <div class="menu-label" data-i18n="Servidor">Servidor</div>
+          <button type="button" id="btn-stop-server" class="menu-item danger" role="menuitem"
+                  data-i18n="⏹ Parar o servidor">⏹ Parar o servidor</button>
+        </div>
         <hr>
         <button type="button" id="btn-console" class="menu-item" role="menuitem" data-i18n="🖥 Consola do servidor">🖥 Consola do servidor</button>
         <hr>

@@ -9,8 +9,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **🖥 Icon in the applications menu** (Linux with a desktop, such as the
+  uConsole or a Raspberry Pi): the installer offers it at the end. It shows
+  the MeshDeckWeb logo, starts the server if it is not running yet (waiting
+  until it answers) and opens the browser at `http://localhost:<port>/`; a
+  second click only opens the browser. `./start-desktop.sh stop` stops the
+  server of that folder and nothing else. The installer also offers the
+  same icon on the desktop, opening with one click: the Raspberry Pi desktop
+  asks "Execute?" for any shortcut copied into the user's folders, so the
+  menu entry also goes to `/usr/local/share/applications/` (with `sudo` when
+  needed) and the desktop gets a `Type=Link` to it, like installed packages.
+  The menu's own "Add to desktop" links to the user's entry, which does not
+  open. Without a terminal, the
+  server log goes to `~/.config/meshdeck/server.log`, trimmed when it grows
+  past 5 MB. Nothing needs `sudo`: the icon lives in
+  `~/.local/share/applications/`.
+- **⏹ Stop the server from the ☰ menu**, after a confirmation, then a
+  "Server stopped" screen. Only shown in a browser on the server's own
+  machine (`localhost`), and the server refuses the request from anywhere
+  else: from the phone there would be no way to start it again.
+
 ### Changed
 
+- **Your own node on the map** has its own label, `🏠` and its short name in
+  gold, always on top and never inside a group. When the NodeDB has no
+  position for it, the position from the node's own GPS is used.
+- **Channel messages that nobody was heard relaying** show
+  "⚠ sent, not confirmed" (orange) instead of "✗ failed (MAX_RETRANSMIT)". A
+  broadcast has no recipient to acknowledge it: the node only counts it as
+  delivered when it hears another node repeat it, and gives up after three
+  tries even when the message did arrive (a CLIENT_MUTE node nearby receives
+  it but does not repeat it). Direct messages keep "✗ failed", since there
+  a missing ACK is a real failure.
 - **Nodes on the map are labels with their short name** instead of small
   dots, in the same state colours (selected, packet just received, RF, MQTT,
   inactive). The selected node and the one that just spoke sit on top;

@@ -55,7 +55,8 @@ igualmente bem num browser de computador.
 - Cada nó é uma etiqueta com o nome curto, colorida por estado — seleccionado,
   pacote acabado de receber, RF activo, MQTT, inactivo (>2 h) — com a legenda
   da cor no popup de cada nó, e fácil de tocar no telemóvel; nós sobrepostos
-  juntam-se num círculo com o número, que se abre ao tocar
+  juntam-se num círculo com o número, que se abre ao tocar; o seu próprio
+  nó é uma etiqueta dourada `🏠`, sempre à vista
 - Traceroutes com SNR por segmento, ligações NeighborInfo
 - No telemóvel, o tema e a lista de traceroutes abrem numa folha sobre o mapa
 
@@ -149,6 +150,18 @@ O instalador guia-o passo a passo:
 6. Define o espaço para o **mapa offline** (200 MB por omissão)
 7. Cria um **atalho de arranque** — `start.sh` (Linux/macOS) ou `start.bat`
    (Windows) — e mostra os endereços a abrir
+8. Em Linux com ambiente gráfico (uConsole, Raspberry Pi), oferece um **ícone
+   no menu de aplicações**, com o logótipo do MeshDeckWeb: arranca o servidor,
+   se ainda não estiver a correr, e abre o browser em `http://localhost:<porta>/`.
+   Fechar o browser deixa o servidor a correr para os outros dispositivos;
+   ☰ → **⏹ Parar o servidor** num browser nessa mesma máquina pára-o (ou
+   `./start-desktop.sh stop` num terminal). Oferece também o mesmo ícone no
+   ambiente de trabalho, que abre com um clique: a entrada do menu é copiada
+   para `/usr/local/share/applications/` (com `sudo` se a pasta não for sua)
+   e o ambiente de trabalho fica com uma ligação a ela, como fazem os pacotes
+   instalados (o "Adicionar ao ambiente de trabalho" do próprio menu cria uma
+   ligação que não abre) Sem terminal, o
+   log do servidor fica em `~/.config/meshdeck/server.log`
 
 A partir daí, arranque o servidor com:
 
@@ -335,7 +348,7 @@ browser.
 
 ```
 meshdeckweb/
-├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho)
+├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho, ícone no menu)
 ├── run_server.py          ← Ponto de entrada e opções da linha de comandos
 ├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
 ├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas

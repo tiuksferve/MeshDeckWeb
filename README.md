@@ -55,7 +55,8 @@ well on a desktop browser.
 - Each node is a label with its short name, coloured by state — selected,
   packet just received, RF active, MQTT, inactive (>2 h) — with the colour
   legend in each node's popup, and easy to tap on a phone; overlapping nodes
-  are grouped into a circle with the count, which opens on tap
+  are grouped into a circle with the count, which opens on tap; your own
+  node is a gold `🏠` label, always visible
 - Traceroutes with per-segment SNR, NeighborInfo links
 - On phones, the theme and traceroute list open as a sheet over the map
 
@@ -149,6 +150,17 @@ The installer guides you step by step:
 6. Sets the space for the **offline map** (200 MB by default)
 7. Creates a **start shortcut** — `start.sh` (Linux/macOS) or `start.bat`
    (Windows) — and shows the addresses to open
+8. On Linux with a desktop (uConsole, Raspberry Pi), offers an **icon in the
+   applications menu**, with the MeshDeckWeb logo: it starts the server if it
+   is not running yet and opens the browser at `http://localhost:<port>/`.
+   Closing the browser leaves the server running for your other devices;
+   ☰ → **⏹ Stop the server** in a browser on that same machine stops it
+   (or `./start-desktop.sh stop` in a terminal). It also offers the same icon
+   on the desktop, opening with one click: the menu entry is copied to
+   `/usr/local/share/applications/` (with `sudo` if that folder is not yours)
+   and the desktop gets a link to it, like installed packages do (the menu's
+   own "Add to desktop" makes a link that does not open) Without a terminal,
+   the server log goes to `~/.config/meshdeck/server.log`
 
 From then on, start the server with:
 
@@ -330,7 +342,7 @@ list view, metrics chart window) stay in each browser.
 
 ```
 meshdeckweb/
-├── install.py             ← Guided setup (venv, password, node, HTTPS, offline map, start shortcut)
+├── install.py             ← Guided setup (venv, password, node, HTTPS, offline map, start shortcut, menu icon)
 ├── run_server.py          ← Entry point and command-line options
 ├── server/                ← Flask + Socket.IO: HTTP API, login, HTTPS, serial bridge
 ├── core/                  ← Node connection, nodes, messages, configuration, metrics
