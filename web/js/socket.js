@@ -25,6 +25,7 @@ export function connectSocket(onToast) {
   socket.on('snapshot', (payload) => store.applySnapshot(payload));
   socket.on('connection', (payload) => store.applyConnection(payload));
   socket.on('reconnect', (payload) => store.applyReconnect(payload));
+  socket.on('mqtt_status', (payload) => store.applyMqttStatus(payload));
   socket.on('nodes', (payload) => store.applyNodes(payload));
   socket.on('nodedb_reset', (payload) => store.applyNodedbReset(payload));
   socket.on('local_node', (payload) => store.applyLocalNode(payload));

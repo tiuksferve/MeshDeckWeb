@@ -25,6 +25,7 @@ from core.messages import MessageStore, channel_key, dm_key
 from core.metrics import SECTIONS, WINDOWED_SECTIONS, MeshMetrics
 from core.metrics_data import spreading_factor_of
 from core import metrics_history as mh
+from core import mqtt_check
 from core.node_store import NodeStore, node_record_from_nodedb
 from core import config_writer
 from core.serialize import to_jsonable
@@ -155,6 +156,13 @@ class MeshSession:
         self.local_position: dict = {}
         self.reconnect: dict = {"attempt": 0, "delay_s": 0}
         self.target: dict = dict(config.last_target)
+
+        # Servidor MQTT do nó: o último endereço lido da configuração fica
+        # guardado e continua a ser testado com o nó desligado, que é quando
+        # o aviso mais falta faz (o meshtasticd bloqueado não deixa ligar).
+        self.mqtt_status: dict = {}
+        self._mqtt_broker: Optional[tuple] = None
+        self._mqtt_timer = self.loop.every(mqtt_check.CHECK_INTERVAL_MS, self._check_mqtt)
 
         self._packet_times: deque = deque()
         self._last_snr = None
@@ -357,6 +365,8 @@ class MeshSession:
         self._broadcast(ev.NODE_READY, {"ready": True,
                                         "favorites": sorted(self.favorites.get_all())})
         self._update_snr_levels()
+        self._read_mqtt_broker(iface)
+        self._check_mqtt()
 
     def _update_snr_levels(self):
         """As cores do SNR dependem do spreading factor do preset do nó."""
@@ -543,6 +553,42 @@ class MeshSession:
     def packet_stats(self) -> dict:
         return {"snr": self._last_snr, "packets_per_min": len(self._packet_times)}
 
+    # -- servidor MQTT do nó ---------------------------------------------
+    def _read_mqtt_broker(self, iface):
+        """Lê da configuração do nó a que servidor MQTT ele se liga."""
+        try:
+            mqtt = iface.localNode.moduleConfig.mqtt
+        except AttributeError:
+            return
+        self._mqtt_broker = mqtt_check.broker_of(mqtt)
+        if self._mqtt_broker is None:
+            self._set_mqtt_status({"enabled": False})
+
+    def _check_mqtt(self):
+        """Corre na thread do loop; o teste em si vai para uma thread, porque
+        pode demorar até PROBE_TIMEOUT_S."""
+        broker = self._mqtt_broker
+        if broker is None:
+            return
+        def probe():
+            ok = mqtt_check.reachable(*broker)
+            self.loop.post(self._mqtt_result, broker, ok)
+        threading.Thread(target=probe, daemon=True, name="mqtt-check").start()
+
+    def _mqtt_result(self, broker, ok: bool):
+        if broker != self._mqtt_broker:
+            return                              # a configuração mudou entretanto
+        host, port = broker
+        if not ok:
+            logger.warning("servidor MQTT do nó %s:%s não responde: o meshtasticd fica "
+                           "bloqueado enquanto tenta ligar-se", host, port)
+        self._set_mqtt_status({"enabled": True, "host": host, "port": port, "reachable": ok})
+
+    def _set_mqtt_status(self, status: dict):
+        if status != self.mqtt_status:
+            self.mqtt_status = status
+            self._broadcast(ev.MQTT_STATUS, dict(status))
+
     # ------------------------------------------------------------------
     # Snapshot para um cliente que acaba de ligar
     # ------------------------------------------------------------------
@@ -551,6 +597,7 @@ class MeshSession:
             "language":       current_language(),
             "connection":     self._connection_payload(),
             "reconnect":      dict(self.reconnect),
+            "mqtt_status":    dict(self.mqtt_status),
             "nodes":          [self._node_payload(n) for n in self.nodes.all()],
             "counts":         self._counts(),
             "local_node":     dict(self.local_node),

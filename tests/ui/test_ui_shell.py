@@ -53,6 +53,16 @@ def test_menu_stops_the_server_from_the_machine_itself(page, ui_server):
         app.stop_server = original
 
 
+def test_mqtt_warning_bar_follows_the_server_status(page):
+    page.js("""import('/js/store.js').then(({ store }) => store.applyMqttStatus(
+      { enabled: true, host: 'mqtt.meshtastic.pt', port: 1883, reachable: false }))""")
+    page.wait_for("!document.getElementById('mqtt-bar').hidden", message="o aviso do MQTT não apareceu")
+    assert "mqtt.meshtastic.pt:1883" in page.text("#mqtt-bar")
+    page.js("""import('/js/store.js').then(({ store }) => store.applyMqttStatus(
+      { enabled: true, host: 'mqtt.meshtastic.pt', port: 1883, reachable: true }))""")
+    page.wait_for("document.getElementById('mqtt-bar').hidden", message="o aviso do MQTT não desapareceu")
+
+
 def test_menu_node_actions_reach_the_server(page):
     page.click("#menu-btn")
     assert not page.js("document.getElementById('btn-send-position').disabled"), \

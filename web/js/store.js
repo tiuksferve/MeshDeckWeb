@@ -52,6 +52,7 @@ class Store extends EventTarget {
     this.localPosition = snapshot.local_position || {};
     this.connection = snapshot.connection || this.connection;
     this.reconnect = snapshot.reconnect || this.reconnect;
+    this.mqttStatus = snapshot.mqtt_status || {};
     this.packetStats = snapshot.packet_stats || this.packetStats;
     this.metricSections = snapshot.metric_sections || [];
     this.favorites = new Set(snapshot.favorites || []);
@@ -71,6 +72,7 @@ class Store extends EventTarget {
     this.emit('messages-changed');
     this.emit('local-node-changed');
     this.emit('local-position-changed');
+    this.emit('mqtt-status-changed');
   }
 
   /* ── eventos incrementais do socket ──────────────────────────────────── */
@@ -100,6 +102,11 @@ class Store extends EventTarget {
   applyReconnect(payload) {
     this.reconnect = payload;
     this.emit('connection-changed');
+  }
+
+  applyMqttStatus(payload) {
+    this.mqttStatus = payload || {};
+    this.emit('mqtt-status-changed');
   }
 
   applyLocalNode(payload) {

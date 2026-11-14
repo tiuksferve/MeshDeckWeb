@@ -163,6 +163,114 @@ def test_connection_lost_schedules_reconnect(wired, loop):
     worker._reconnect_timer.stop()
 
 
+# ── uma tentativa de ligação de cada vez ─────────────────────────────────────
+# O watchdog (12 s) disparava antes de a biblioteca desistir (30 s) e marcava
+# outra tentativa com a primeira ainda pendente; a falha chegava ainda pelo
+# evento "connection.lost" e pela excepção, cada um a marcar a sua. As
+# ligações acumulavam-se na fila do meshtasticd, que só atende uma aplicação.
+
+class SlowTCP:
+    """TCPInterface que fica à espera até o teste a soltar."""
+    created = []
+
+    def __init__(self, hostname, portNumber=4403, **kwargs):
+        import threading
+        type(self).created.append(self)
+        self.closed = False
+        self.release = threading.Event()
+        self.outcome = None
+        assert self.release.wait(5), "o teste não soltou a tentativa"
+        if self.outcome is not None:
+            raise self.outcome
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def slow_tcp(monkeypatch):
+    import core.mesh_worker as mw
+    SlowTCP.created = []
+    monkeypatch.setattr(mw, "TCPInterface", SlowTCP)
+    return SlowTCP
+
+
+def wait_until(predicate, timeout=3.0):
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        assert time.monotonic() < deadline, "a condição não chegou a acontecer"
+        time.sleep(0.01)
+
+
+def test_only_one_attempt_runs_at_a_time(loop, slow_tcp):
+    worker = MeshtasticWorker(loop=loop)
+    rec = Recorder(worker)
+    loop.post(worker._begin_attempt)
+    wait_until(lambda: len(slow_tcp.created) == 1)
+    # Com a tentativa pendente, nada lança outra: nem um novo pedido, nem o
+    # evento de ligação perdida, nem um reconnect marcado.
+    loop.post(worker._begin_attempt)
+    loop.post(worker._handle_connection_lost)
+    loop.post(worker._do_reconnect)
+    rec.quiesce(loop)
+    assert len(slow_tcp.created) == 1
+    assert rec["reconnect_status"] == []
+    # Falha por tempo esgotado: marca uma (e só uma) tentativa seguinte.
+    slow_tcp.created[0].outcome = Exception("Timed out waiting for connection completion")
+    slow_tcp.created[0].release.set()
+    rec.wait("reconnect_status")
+    loop.post(worker._handle_connection_lost)          # a biblioteca também avisa
+    rec.quiesce(loop)
+    assert rec["reconnect_status"] == [(1, 15)]
+    worker._reconnect_timer.stop()
+
+
+def test_abandoned_attempt_is_closed_when_it_finally_connects(loop, slow_tcp):
+    worker = MeshtasticWorker(loop=loop)
+    loop.post(worker._begin_attempt)
+    wait_until(lambda: len(slow_tcp.created) == 1)
+    loop.post(worker._on_connect_watchdog)              # passou o limite
+    Recorder(worker).quiesce(loop)
+    late = slow_tcp.created[0]
+    late.release.set()                                   # liga, mas já tarde
+    wait_until(lambda: late.closed)
+    assert worker.iface is None, "uma tentativa abandonada ficou como interface"
+    worker._reconnect_timer.stop()
+
+
+def test_watchdog_waits_longer_than_the_library():
+    import core.mesh_worker as mw
+    assert mw.CONNECT_TIMEOUT_MS > 30_000
+
+
+@pytest.mark.parametrize("error, expected", [
+    (Exception("Timed out waiting for connection completion"), "serves one app at a time"),
+    (ConnectionRefusedError(111, "Connection refused"), "not running or still starting"),
+])
+def test_first_failure_explains_what_happened(loop, slow_tcp, error, expected):
+    import i18n
+    worker = MeshtasticWorker(hostname="192.168.1.120", loop=loop)
+    rec = Recorder(worker)
+    loop.post(worker._begin_attempt)
+    wait_until(lambda: len(slow_tcp.created) == 1)
+    slow_tcp.created[0].outcome = error
+    slow_tcp.created[0].release.set()
+    rec.wait("error_occurred")
+    with i18n.use_language("en"):
+        text = str(rec["error_occurred"][0][0])
+    assert expected in text
+    assert "192.168.1.120" in text
+    # A segunda falha seguida fica só no log.
+    worker._reconnect_timer.stop()
+    loop.post(worker._do_reconnect)
+    wait_until(lambda: len(slow_tcp.created) == 2)
+    slow_tcp.created[1].outcome = error
+    slow_tcp.created[1].release.set()
+    rec.wait("reconnect_status", 2)
+    assert len(rec["error_occurred"]) == 1
+    worker._reconnect_timer.stop()
+
+
 # ── processamento de pacotes ─────────────────────────────────────────────────
 
 def test_raw_packet_is_emitted_for_metrics(wired):

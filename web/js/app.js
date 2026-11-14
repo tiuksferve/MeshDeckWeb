@@ -104,7 +104,7 @@ function showApp() {
    quebra linha), para as abas de altura fixa (mapa, mensagens, métricas)
    ocuparem exactamente o resto do ecrã. */
 function wireLayout() {
-  const chrome = [document.querySelector('header'), $('tabs'), $('reconnect-bar')];
+  const chrome = [document.querySelector('header'), $('tabs'), $('reconnect-bar'), $('mqtt-bar')];
   const measure = () => {
     const h = chrome.reduce((sum, el) => sum + (el.hidden ? 0 : el.offsetHeight), 0);
     document.documentElement.style.setProperty('--chrome-h', `${h}px`);
@@ -200,11 +200,14 @@ function wireHeader() {
   store.on('log-line', (line) => appendLog(line));
 
   store.on('connection-changed', renderConnectionState);
+  store.on('mqtt-status-changed', renderMqttStatus);
+  store.on('language-changed', renderMqttStatus);
   store.on('local-node-changed', renderNodeLabel);
   store.on('packet-stats-changed', renderPacketStats);
   store.on('messages-changed', renderMessagesBadge);
 
   renderConnectionState();
+  renderMqttStatus();
   renderNodeLabel();
   renderPacketStats();
   renderMessagesBadge();
@@ -257,6 +260,19 @@ function renderConnectionState() {
       { attempt: reconnect.attempt, delay: reconnect.delay_s });
   } else {
     bar.hidden = true;
+  }
+}
+
+/* Servidor MQTT do nó inacessível: o meshtasticd fica bloqueado enquanto
+   tenta ligar-se, e o nó parece parado (não liga, mensagens atrasadas). */
+function renderMqttStatus() {
+  const status = store.mqttStatus || {};
+  const bar = $('mqtt-bar');
+  const down = status.enabled === true && status.reachable === false;
+  bar.hidden = !down;
+  if (down) {
+    bar.textContent = t('⚠ O servidor MQTT do nó ({server}) não responde. Enquanto tenta ligar-se, o meshtasticd fica bloqueado: o nó não atende e as mensagens atrasam. Desligue o MQTT ou mude de servidor em Configuração → MQTT.',
+      { server: `${status.host}:${status.port}` });
   }
 }
 

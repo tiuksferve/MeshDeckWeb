@@ -374,6 +374,10 @@ _STRINGS: dict = {
     "pos_no_coords_msg":            {"pt": "O nó local não tem posição disponível.\n\nVerifique se:\n  • O GPS está activo e já adquiriu sinal, ou\n  • Está definida uma posição fixa em Configurações → Posição/GPS\n    (campos Latitude fixa / Longitude fixa).", "en": "The local node has no position available.\n\nCheck:\n  • GPS is active and has acquired a signal, or\n  • A fixed position is set in Settings → Position/GPS\n    (Fixed Latitude / Fixed Longitude fields)."},
     "Não conectado.":               {"pt": "Não conectado.",                  "en": "Not connected."},
     # ── Erros do worker (error_occurred.emit) ─────────────────────────────────
+    "err_node_timeout":             {"pt": "O nó não respondeu ({host}:{port}). O meshtasticd só atende uma aplicação de cada vez: feche outras aplicações ligadas a este nó (a app Meshtastic, outro MeshDeckWeb, a linha de comandos). Se o MQTT do nó estiver ligado a um servidor inacessível, o meshtasticd também fica sem responder enquanto tenta. A nova tentativa é automática.",
+                                     "en": "The node did not answer ({host}:{port}). meshtasticd serves one app at a time: close other apps connected to this node (the Meshtastic app, another MeshDeckWeb, the command line). If the node's MQTT points at an unreachable server, meshtasticd also stops answering while it tries. It will retry automatically."},
+    "err_node_refused":             {"pt": "O nó recusou a ligação ({host}:{port}): o meshtasticd não está a correr ou ainda está a arrancar. A nova tentativa é automática.",
+                                     "en": "The node refused the connection ({host}:{port}): meshtasticd is not running or still starting. It will retry automatically."},
     "err_tcp_create":               {"pt": "Falha ao criar interface TCP ({host}:{port}): {err}",
                                      "en": "Failed to create TCP interface ({host}:{port}): {err}"},
     # ── Servidor web ─────────────────────────────────────────────────────────
@@ -1082,6 +1086,9 @@ _STRINGS: dict = {
     "🗑 NodeDB do nó limpa.": {"pt": "🗑 NodeDB do nó limpa.", "en": "🗑 The node's NodeDB was cleared."},
     "Servidor": {"pt": "Servidor", "en": "Server"},
     "O meu nó": {"pt": "O meu nó", "en": "My node"},
+    "⚠ O servidor MQTT do nó ({server}) não responde. Enquanto tenta ligar-se, o meshtasticd fica bloqueado: o nó não atende e as mensagens atrasam. Desligue o MQTT ou mude de servidor em Configuração → MQTT.":
+        {"pt": "⚠ O servidor MQTT do nó ({server}) não responde. Enquanto tenta ligar-se, o meshtasticd fica bloqueado: o nó não atende e as mensagens atrasam. Desligue o MQTT ou mude de servidor em Configuração → MQTT.",
+         "en": "⚠ The node's MQTT server ({server}) is not answering. While it tries to connect, meshtasticd is blocked: the node does not answer and messages are delayed. Turn MQTT off or pick another server in Configuration → MQTT."},
     "⚠ enviada, sem confirmação": {"pt": "⚠ enviada, sem confirmação", "en": "⚠ sent, not confirmed"},
     "Nenhum nó foi ouvido a retransmiti-la; pode ter chegado na mesma.":
         {"pt": "Nenhum nó foi ouvido a retransmiti-la; pode ter chegado na mesma.",
