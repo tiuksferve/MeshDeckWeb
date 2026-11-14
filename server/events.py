@@ -24,6 +24,7 @@ from core.serialize import to_epoch
 SNAPSHOT        = "snapshot"          # estado completo, ao ligar ou após reload
 CONNECTION      = "connection"        # estado da ligação ao nó
 RECONNECT       = "reconnect"         # contagem do backoff de reconexão
+MQTT_STATUS     = "mqtt_status"       # o servidor MQTT do nó responde?
 ERROR           = "error"             # mensagem de erro para toast
 LOG             = "log"               # linha de log para a consola
 NODES           = "nodes"             # lote de nós criados ou actualizados

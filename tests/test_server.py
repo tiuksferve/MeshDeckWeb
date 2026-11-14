@@ -141,6 +141,38 @@ def test_stop_server_only_from_the_machine_itself(server):
     assert stops == [1]
 
 
+def test_session_warns_when_the_nodes_mqtt_server_does_not_answer(server):
+    import socket
+    import time
+    from types import SimpleNamespace as NS
+    mesh, broadcasts = server["mesh"], server["broadcasts"]
+
+    def iface_with(address):
+        mqtt = NS(enabled=True, proxy_to_client_enabled=False, address=address, tls_enabled=False)
+        return NS(localNode=NS(moduleConfig=NS(mqtt=mqtt)))
+
+    def wait_status():
+        for _ in range(100):
+            found = [p for e, p in broadcasts if e == "mqtt_status"]
+            if found:
+                return found[-1]
+            time.sleep(0.05)
+        raise AssertionError("o estado do MQTT não chegou")
+
+    with socket.socket() as free:
+        free.bind(("127.0.0.1", 0))
+        port = free.getsockname()[1]
+    mesh._read_mqtt_broker(iface_with(f"127.0.0.1:{port}"))
+    mesh._check_mqtt()
+    assert wait_status() == {"enabled": True, "host": "127.0.0.1", "port": port, "reachable": False}
+    assert mesh.snapshot()["mqtt_status"]["reachable"] is False
+
+    # Desligado o MQTT no nó, o aviso desaparece.
+    broadcasts.clear()
+    mesh._read_mqtt_broker(NS(localNode=NS(moduleConfig=NS(mqtt=NS(enabled=False)))))
+    assert wait_status() == {"enabled": False}
+
+
 def test_login_with_a_wrong_password(server):
     response = server["client"].post("/api/login", json={"password": "errada"})
     assert response.status_code == 401

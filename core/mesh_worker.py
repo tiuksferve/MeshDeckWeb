@@ -29,6 +29,14 @@ from core.loop import CoreLoop, default_loop, on_loop
 from core.signals import Signal
 from i18n import lazy_tr, tr
 
+# A biblioteca meshtastic espera 30 s pelo handshake do nó antes de desistir.
+# O watchdog tem de esperar mais do que isso: com 12 s marcava uma tentativa
+# nova enquanto a anterior ainda estava pendente, e as ligações acumulavam-se
+# na fila do meshtasticd (que só atende uma aplicação de cada vez), atrasando
+# ainda mais a reentrada.
+CONNECT_TIMEOUT_MS = 45_000
+RECONNECT_DELAYS_MS = (15_000, 30_000, 60_000, 120_000)
+
 
 def _clean_text(value):
     """Remove surrogates Unicode soltos de texto livre vindo do firmware.
@@ -87,6 +95,11 @@ class MeshtasticWorker:
         self._known_nodes: Set[str] = set()
         self._channels:    Dict[int, tuple] = {}
         self._reconnect_attempts = 0
+        # Uma tentativa de ligação de cada vez. O número identifica a
+        # tentativa em curso: o resultado de uma tentativa abandonada (pelo
+        # watchdog ou por stop()) chega tarde e é deitado fora.
+        self._attempt = 0
+        self._attempt_running = False
 
         # ── Sinais ───────────────────────────────────────────────────────────
         self.connection_changed     = Signal("connection_changed")      # (connected: bool)
@@ -147,7 +160,7 @@ class MeshtasticWorker:
 
     @on_loop
     def start(self):
-        if self.iface is not None:
+        if self.iface is not None or self._attempt_running:
             return
         logger.info(f"Connecting to {self.hostname}:{self.port}…")
         self._known_nodes.clear()
@@ -155,33 +168,72 @@ class MeshtasticWorker:
         self._subscribe_pubsub()
         # Defer the actual socket creation by one event-loop cycle so the
         # "Connecting…" status reaches the UI before anything blocks.
-        self._loop.single_shot(50, self._do_connect)
+        self._loop.single_shot(50, self._begin_attempt)
 
-    def _do_connect(self):
-        """Creates the TCPInterface in a background thread so the UI never
-        freezes waiting for the node to respond (especially after a reboot
-        where the node may take several seconds to re-enumerate on serial)."""
-        t = threading.Thread(target=self._connect_thread, daemon=True,
-                             name="meshdeck-tcp-connect")
-        t.start()
+    # ------------------------------------------------------------------
+    # Tentativas de ligação
+    # ------------------------------------------------------------------
+    def _begin_attempt(self):
+        """Corre na thread do loop: lança uma tentativa, se não houver outra.
 
-    def _connect_thread(self):
-        """Background thread: creates TCPInterface or SerialInterface."""
+        A interface é criada numa thread de fundo, porque o construtor da
+        biblioteca bloqueia até 30 s à espera do nó.
+        """
+        if self._attempt_running or self._connected:
+            return
+        self._attempt += 1
+        self._attempt_running = True
+        threading.Thread(target=self._connect_thread, args=(self._attempt,), daemon=True,
+                         name="meshdeck-connect").start()
+        self._connect_watchdog.start(CONNECT_TIMEOUT_MS)
+
+    def _connect_thread(self, attempt=None):
+        """Thread de fundo: cria a TCPInterface ou a SerialInterface."""
         try:
             if self.serial_port:
                 logger.info(f"Connecting via SerialInterface on {self.serial_port}")
                 iface = SerialInterface(self.serial_port)
             else:
                 iface = TCPInterface(self.hostname, portNumber=self.port)
-            self.iface = iface
         except Exception as e:
-            self._emit(self.error_occurred,
-                       lazy_tr("err_tcp_create", host=self.hostname, port=self.port, err=e))
-            logger.exception("Error starting worker")
+            logger.warning(f"Connection attempt failed: {e}")
+            self._loop.post(self._attempt_finished, attempt, e)
+            return
+        if attempt is not None and attempt != self._attempt:
+            # Abandonada entretanto: não fica a ocupar o nó.
+            threading.Thread(target=iface.close, daemon=True, name="iface-close-stale").start()
+            return
+        # Atribuída já aqui, e não pelo loop: o evento "connection.established"
+        # da biblioteca pode ser tratado antes e precisa da interface.
+        self.iface = iface
+        self._loop.post(self._attempt_finished, attempt, None)
+
+    def _attempt_finished(self, attempt, error):
+        """Corre na thread do loop quando a thread da tentativa termina."""
+        if attempt is not None and attempt != self._attempt:
+            return                              # tentativa abandonada
+        self._attempt_running = False
+        if error is None:
+            return          # o watchdog continua até "connection.established"
+        self._connect_watchdog.stop()
+        if self._reconnect_attempts == 0:
+            # Só a primeira falha de uma série vira aviso; as seguintes
+            # ficam no log, para não encher a interface de avisos.
+            self._emit(self.error_occurred, self._connect_error_text(error))
+        self._schedule_reconnect()
+
+    def _connect_error_text(self, error):
+        if isinstance(error, ConnectionRefusedError):
+            return lazy_tr("err_node_refused", host=self.hostname, port=self.port)
+        if "Timed out" in str(error):
+            return lazy_tr("err_node_timeout", host=self.hostname, port=self.port)
+        return lazy_tr("err_tcp_create", host=self.hostname, port=self.port, err=error)
 
     def stop(self):
         self._reconnect_timer.stop()
         self._connect_watchdog.stop()
+        self._attempt += 1                      # uma tentativa em curso fica abandonada
+        self._attempt_running = False
         self._unsubscribe_pubsub()
         self._known_nodes.clear()
         if self.iface:
@@ -211,75 +263,56 @@ class MeshtasticWorker:
         if self._connected:
             self._connected = False
             self._emit(self.connection_changed, False)
+        # Uma tentativa que falha também dispara "connection.lost"; quem
+        # agenda a seguinte é o fim dessa tentativa (_attempt_finished).
+        if self._attempt_running:
+            return
         self._schedule_reconnect()
 
     def _schedule_reconnect(self):
-        """Backoff exponencial: 15s → 30s → 60s → 120s (máx)."""
-        delays = [15_000, 30_000, 60_000, 120_000]
-        idx    = min(self._reconnect_attempts, len(delays) - 1)
-        delay  = delays[idx]
+        """Backoff exponencial: 15s → 30s → 60s → 120s (máx).
+
+        Nunca há duas marcadas nem uma marcada com outra em curso: a falha
+        de uma tentativa chega por vários caminhos (excepção, evento
+        "connection.lost", watchdog) e cada um pedia a sua.
+        """
+        if self._reconnect_timer.is_active or self._attempt_running:
+            return
+        idx    = min(self._reconnect_attempts, len(RECONNECT_DELAYS_MS) - 1)
+        delay  = RECONNECT_DELAYS_MS[idx]
         self._reconnect_attempts += 1
         logger.info(f"Reconnect #{self._reconnect_attempts} in {delay//1000}s…")
         self._emit(self.reconnect_status, self._reconnect_attempts, delay // 1000)
         self._reconnect_timer.start(delay)
 
     def _do_reconnect(self):
-        """Tenta fechar a interface antiga e criar uma nova.
-        Re-subscreve os handlers pubsub antes de criar o TCPInterface.
-        Após criar a interface arranca um watchdog de 12s: se _connected
-        ainda for False no timeout, o TCPInterface ficou pendurado sem
-        lançar excepção nem disparar o evento pubsub — forçamos nova tentativa.
-        """
-        if self._connected:
+        """Fecha a interface antiga, volta a subscrever os eventos e lança
+        uma tentativa nova (com o watchdog de CONNECT_TIMEOUT_MS)."""
+        if self._connected or self._attempt_running:
             return
-        try:
-            if self.iface:
-                _old_iface = self.iface
-                self.iface = None
-                threading.Thread(target=lambda: _old_iface.close(), daemon=True, name="iface-close-reconnect").start()
-            self._known_nodes.clear()
-            # Re-subscreve handlers pubsub
-            self._unsubscribe_pubsub()
-            self._subscribe_pubsub()
-            logger.info(f"Reconnecting to {self.hostname}:{self.port}…")
-            # Use a background thread so the UI never freezes waiting for
-            # the node to respond (critical after serial reboot)
-            threading.Thread(target=self._reconnect_thread, daemon=True,
-                             name="meshdeck-tcp-reconnect").start()
-            # Watchdog: 12s para o evento pubsub chegar; caso contrário tenta de novo
-            self._connect_watchdog.start(12_000)
-        except Exception as e:
-            logger.warning(f"Reconnection failed: {e}")
-            self._connect_watchdog.stop()
-            self._schedule_reconnect()
-
-    def _reconnect_thread(self):
-        """Background thread: creates TCPInterface or SerialInterface for reconnection."""
-        try:
-            if self.serial_port:
-                self.iface = SerialInterface(self.serial_port)
-            else:
-                self.iface = TCPInterface(self.hostname, portNumber=self.port)
-        except Exception as e:
-            logger.warning(f"Reconnection thread failed: {e}")
-            # Estamos numa thread de fundo: o watchdog e _reconnect_attempts
-            # pertencem à thread do loop, por isso delegamos em vez de os tocar
-            # aqui (tocá-los daqui seria uma corrida).
-            self._loop.post(self._handle_connect_failure)
-
-    def _handle_connect_failure(self):
-        """Corre na thread do loop: desarma o watchdog e agenda nova tentativa."""
-        self._connect_watchdog.stop()
-        self._schedule_reconnect()
+        if self.iface:
+            _old_iface = self.iface
+            self.iface = None
+            threading.Thread(target=lambda: _old_iface.close(), daemon=True, name="iface-close-reconnect").start()
+        self._known_nodes.clear()
+        self._unsubscribe_pubsub()
+        self._subscribe_pubsub()
+        logger.info(f"Reconnecting to {self.hostname}:{self.port}…")
+        self._begin_attempt()
 
     def _on_connect_watchdog(self):
-        """Chamado 12s após _do_reconnect se _connected ainda for False.
-        O TCPInterface criou o socket mas o handshake Meshtastic não completou
-        (daemon lento, rede instável). Fecha e agenda nova tentativa.
+        """CONNECT_TIMEOUT_MS depois de lançar uma tentativa, sem ligação.
+
+        Ou a interface foi criada mas o handshake nunca terminou, ou a
+        própria thread ficou presa para lá do limite da biblioteca. Em ambos
+        os casos a tentativa é abandonada (o resultado tardio é fechado) e
+        marca-se a seguinte.
         """
         if self._connected:
             return
-        logger.warning("Watchdog: no connection after 12s — rescheduling attempt…")
+        logger.warning(f"Watchdog: no connection after {CONNECT_TIMEOUT_MS // 1000}s — rescheduling attempt…")
+        self._attempt += 1
+        self._attempt_running = False
         if self.iface:
             _old_iface = self.iface
             self.iface = None

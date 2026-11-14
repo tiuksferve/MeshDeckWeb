@@ -49,6 +49,17 @@ igualmente bem num browser de computador.
   ℹ️ detalhe do último pacote
 - Pesquisa por ID, nome longo ou nome curto
 
+### 💬 Mensagens
+
+- Canais (índices 0–7) e mensagens directas, com contadores de não lidas
+- DMs cifradas com **PKI** quando a chave pública é conhecida, **PSK** caso contrário
+- **Respostas** (↩) com o `reply_id` nativo do Meshtastic, visíveis também noutras apps
+- ACK/NAK por mensagem enviada, tom discreto nas mensagens recebidas por RF;
+  uma mensagem de canal que nenhum nó foi ouvido a retransmitir mostra
+  "⚠ enviada, sem confirmação" (pode bem ter chegado), e uma DM sem ACK é uma
+  falha
+- **Som de mensagem**, que pode ser desligado em cada dispositivo
+
 ### 🗺 Mapa (Leaflet)
 
 - Temas: 🌑 Escuro · ☀ Claro · 🛰 Satélite (híbrido, com localidades e estradas)
@@ -59,14 +70,6 @@ igualmente bem num browser de computador.
   nó é uma etiqueta dourada `🏠`, sempre à vista
 - Traceroutes com SNR por segmento, ligações NeighborInfo
 - No telemóvel, o tema e a lista de traceroutes abrem numa folha sobre o mapa
-
-### 💬 Mensagens
-
-- Canais (índices 0–7) e mensagens directas, com contadores de não lidas
-- DMs cifradas com **PKI** quando a chave pública é conhecida, **PSK** caso contrário
-- **Respostas** (↩) com o `reply_id` nativo do Meshtastic, visíveis também noutras apps
-- ACK/NAK por mensagem enviada, tom discreto nas mensagens recebidas por RF
-- **Som de mensagem**, que pode ser desligado em cada dispositivo
 
 ### 🧭 Navegação
 
@@ -379,6 +382,22 @@ São saltados se não houver Chromium/Chrome instalado
 uma captura em `.pytest_cache/ui-failures/`.
 
 ---
+
+## 🩺 Quando o Nó Parece Parado
+
+- **O meshtasticd só atende uma aplicação de cada vez.** Enquanto a app
+  Meshtastic, outro MeshDeckWeb ou a linha de comandos `meshtastic` estiverem
+  ligados ao nó, uma ligação nova fica à espera e falha ao fim de 30 s, tanto
+  por `localhost` como pelo IP. A MeshDeckWeb avisa e volta a tentar sozinha
+  (15 s, 30 s, 60 s e depois de 2 em 2 min), uma tentativa de cada vez.
+- **Um servidor MQTT que não responde bloqueia o nó.** Com o MQTT ligado e o
+  servidor inacessível, o meshtasticd fica parado cerca de 2 minutos em cada
+  tentativa de ligação: não atende as aplicações e as mensagens atrasam. O
+  servidor testa o servidor MQTT do nó de 5 em 5 minutos e mostra uma barra de
+  aviso enquanto não responder; desligue o MQTT ou mude de servidor em
+  Configuração → MQTT.
+- **"Ligação recusada" (erro 111):** o meshtasticd não está a correr ou ainda
+  está a arrancar (`systemctl status meshtasticd`).
 
 ## 📡 Requisitos de Firmware Meshtastic
 

@@ -49,6 +49,16 @@ well on a desktop browser.
   ℹ️ last packet details
 - Search by ID, long or short name
 
+### 💬 Messages
+
+- Channels (indices 0–7) and direct messages, with unread counters
+- DMs encrypted with **PKI** when the public key is known, **PSK** otherwise
+- **Replies** (↩) using the native Meshtastic `reply_id`, shown in other apps too
+- ACK/NAK per sent message, subtle tint for messages received over RF; a
+  channel message that no node was heard relaying shows "⚠ sent, not
+  confirmed" (it may well have arrived), while a DM without ACK is a failure
+- **Message sound**, which can be turned off per device
+
 ### 🗺 Map (Leaflet)
 
 - Themes: 🌑 Dark · ☀ Light · 🛰 Satellite (hybrid, with place names and roads)
@@ -59,14 +69,6 @@ well on a desktop browser.
   node is a gold `🏠` label, always visible
 - Traceroutes with per-segment SNR, NeighborInfo links
 - On phones, the theme and traceroute list open as a sheet over the map
-
-### 💬 Messages
-
-- Channels (indices 0–7) and direct messages, with unread counters
-- DMs encrypted with **PKI** when the public key is known, **PSK** otherwise
-- **Replies** (↩) using the native Meshtastic `reply_id`, shown in other apps too
-- ACK/NAK per sent message, subtle tint for messages received over RF
-- **Message sound**, which can be turned off per device
 
 ### 🧭 Navigation
 
@@ -372,6 +374,22 @@ no Chromium/Chrome is installed (`MESHDECK_BROWSER=/path/to/browser` picks
 one). A failing test leaves a screenshot in `.pytest_cache/ui-failures/`.
 
 ---
+
+## 🩺 When the Node Seems Stuck
+
+- **meshtasticd serves one app at a time.** While the Meshtastic app, another
+  MeshDeckWeb or the `meshtastic` command line is connected to the node, a new
+  connection waits and fails after 30 s, from `localhost` or from the IP
+  alike. MeshDeckWeb says so, and retries on its own (15 s, 30 s, 60 s, then
+  every 2 min), one attempt at a time.
+- **An MQTT server that does not answer blocks the node.** With MQTT on and
+  the server unreachable, meshtasticd stops for about 2 minutes on each
+  connection attempt: it does not answer apps and messages are delayed. The
+  server tests the node's MQTT server every 5 minutes and shows a warning bar
+  while it does not answer; turn MQTT off or pick another server in
+  Configuration → MQTT.
+- **"Connection refused" (error 111):** meshtasticd is not running or is still
+  starting (`systemctl status meshtasticd`).
 
 ## 📡 Meshtastic Firmware Requirements
 

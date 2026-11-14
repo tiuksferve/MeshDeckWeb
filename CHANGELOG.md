@@ -11,6 +11,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **⚠ Warning when the node's MQTT server does not answer.** With MQTT on and
+  the server unreachable, meshtasticd stops for about 2 minutes on every
+  connection attempt (it does not answer apps, messages are delayed), which
+  looks like a broken connection. The server reads the MQTT server from the
+  node's configuration, tests it every 5 minutes, also while the node is
+  disconnected, and the page shows a bar until it answers or MQTT is turned
+  off. Nothing to test with "proxy to client".
+- README: **"When the node seems stuck"** — one app at a time, the MQTT
+  block, connection refused.
 - **🖥 Icon in the applications menu** (Linux with a desktop, such as the
   uConsole or a Raspberry Pi): the installer offers it at the end. It shows
   the MeshDeckWeb logo, starts the server if it is not running yet (waiting
@@ -33,6 +42,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Tab order:** Nodes, Messages, Map, Navigation, Metrics, Configuration
+  (Messages moved before Map).
 - **Your own node on the map** has its own label, `🏠` and its short name in
   gold, always on top and never inside a group. When the NodeDB has no
   position for it, the position from the node's own GPS is used.
@@ -58,6 +69,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inside a group (from the list or the 📍) opens the group. Two nodes closer
   than a tap area are always grouped, so a tap can no longer land on the
   neighbour. Uses Leaflet.markercluster 1.5.3 (MIT), bundled like Leaflet.
+
+### Fixed
+
+- **Reconnecting to the node no longer piles up attempts.** The watchdog gave
+  up after 12 s, while the Meshtastic library waits 30 s for the node, so a
+  new attempt started with the previous one still pending; the failure then
+  arrived through three paths (exception, "connection lost", watchdog) and
+  each scheduled its own retry. The abandoned connections queued up in
+  meshtasticd, which serves one app at a time, and delayed getting back in.
+  Now there is one attempt at a time, the watchdog waits 45 s, a late result
+  from an abandoned attempt is closed, and only one retry is ever scheduled.
+- **Clear message when the node does not answer:** that meshtasticd serves
+  one app at a time (close the Meshtastic app, another MeshDeckWeb or the
+  command line), that an unreachable MQTT server also blocks it, or, on
+  "connection refused", that meshtasticd is not running or still starting.
+  Shown once per series of failures; the retries only go to the log.
 
 ---
 
