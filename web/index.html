@@ -119,6 +119,7 @@
     <button data-tab="map" class="tab"><span data-i18n="🗺 Mapa">🗺 Mapa</span></button>
     <button data-tab="navigation" class="tab"><span data-i18n="🧭 Navegação">🧭 Navegação</span></button>
     <button data-tab="metrics" class="tab"><span data-i18n="📊 Métricas">📊 Métricas</span></button>
+    <button data-tab="automations" class="tab"><span data-i18n="🤖 Automações">🤖 Automações</span></button>
     <button data-tab="config" class="tab"><span data-i18n="⚙️ Configuração">⚙️ Configuração</span></button>
   </nav>
 
@@ -196,7 +197,7 @@
         </aside>
         <div class="conv-main">
           <div class="conv-header">
-            <button type="button" id="conv-back" class="ghost small conv-back" title="Voltar às conversas" data-i18n-title="Voltar às conversas">←</button>
+            <button type="button" id="conv-back" class="conv-back" title="Voltar às conversas" data-i18n-title="Voltar às conversas"><span class="conv-back-arrow" aria-hidden="true">‹</span><span data-i18n="Conversas">Conversas</span></button>
             <span id="conv-header" class="muted">Selecciona uma conversa</span>
           </div>
           <div id="conv-view" class="conv-view"></div>
@@ -253,6 +254,11 @@
         </aside>
         <iframe id="metrics-frame" class="metrics-frame"></iframe>
       </div>
+    </section>
+
+    <!-- ── Automações (ver automations.js) ─────────────────────────────── -->
+    <section id="panel-automations" class="panel-tab">
+      <div id="auto-root" class="auto-layout"></div>
     </section>
 
     <!-- ── Configuração ────────────────────────────────────────────────── -->

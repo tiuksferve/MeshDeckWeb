@@ -117,6 +117,34 @@ never stored there.
 | 📏 Range & Links | **Direct range** (0 hops) from the local node, **who relays the most**, NeighborInfo link distances |
 | ⏰ Intervals | Average time between packets per node |
 
+### 🤖 Automations
+
+The server answers commands on its own, with the browser closed too. Someone
+sends `ping` to the node and gets back, as a reply to their message,
+`🏓 pong P1 · 2 hops · last hop SNR 6.5 dB · RSSI -98 dBm · RF`.
+
+- A command is the **whole message**, one word: `ping`, `Ping!` and `ping?`
+  answer, "I sent a ping" does not. Portuguese and English words both work
+- Built in: `ping` (hops and signal of the message) · `help` (the active
+  commands) · `info` (uptime, battery, channel use, airtime) · `signal` (how
+  the server hears the sender: average SNR/RSSI of their direct packets in
+  the last hour) · `nodes` (nodes heard in 1 h and 24 h, direct ones) ·
+  `dist` (distance and bearing) · `pos` (this node's position) · `time`
+- **Custom commands**: a word and a fixed reply, such as `rules` → "No spam
+  on this channel"
+- Every reply is an editable template with variables (`{short}`, `{hops}`,
+  `{signal}`, `{battery}`, …) and a preview with real data and its size in
+  bytes. Replies go out in the server's language
+- Answers **DMs** and, when chosen, **channels**; each command for everyone
+  or favourites only (`pos` and `dist` start as favourites only)
+- **Limits**, because airtime is shared: off by default, a minimum interval
+  per node (30 s), replies per minute (5), a pause when the node has used 8%
+  of airtime in the last hour (the EU_868 limit is 10%), requests over MQTT
+  ignored, and never an answer to a reply, so two bots cannot talk to each
+  other forever
+- A **log** of the commands received and what was done with each one; the
+  automatic replies are marked 🤖 in Messages
+
 ### 🔐 Access and Languages
 
 - Password login; the session can be remembered per browser
@@ -329,6 +357,7 @@ Settings live in `~/.config/meshdeck/` (or `$XDG_CONFIG_HOME/meshdeck/`):
 |------|----------|
 | `server.json` | Session key, password hash, bind address, HTTPS settings |
 | `settings.json` | Server language (terminal, logs) and other preferences |
+| `automations.json` | Automations: commands, reply templates and limits |
 | `tls/` | Local CA and server certificate (the private keys are readable only by you) |
 | `metrics/` | Metrics history of the last 7 days, one SQLite file per local node (at most 50 MB each; writing pauses when the disk has less than 100 MB free). "🗑 clear metrics" empties it |
 

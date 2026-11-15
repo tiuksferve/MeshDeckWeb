@@ -19,6 +19,7 @@ import * as MessagesTab from './tabs/messages.js';
 import * as NavigationTab from './tabs/navigation.js';
 import * as MetricsTab from './tabs/metrics.js';
 import * as ConfigTab from './tabs/config.js';
+import * as AutomationsTab from './tabs/automations.js';
 import * as Traceroute from './traceroute.js';
 import { initSound, isSoundEnabled, setSoundEnabled, playMessageSound } from './sound.js';
 
@@ -30,6 +31,7 @@ const TABS = {
   messages: MessagesTab,
   navigation: NavigationTab,
   metrics: MetricsTab,
+  automations: AutomationsTab,
   config: ConfigTab,
 };
 
@@ -139,6 +141,7 @@ function mountAllTabs() {
     showOnMap: (nodeId) => { switchTab('map'); MapTab.focusNode(nodeId); },
   });
   MetricsTab.mount();
+  AutomationsTab.mount({ toast: showToast });
   ConfigTab.mount();
 }
 

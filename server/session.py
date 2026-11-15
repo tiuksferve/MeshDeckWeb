@@ -12,12 +12,14 @@ e tem de receber tudo de uma vez.
 
 import base64
 import logging
+import os
 import sqlite3
 import threading
 import time
 from collections import deque
 from typing import Optional
 
+from core import automations as auto
 from core.favorites import FirmwareFavorites
 from core.loop import CoreLoop
 from core.mesh_worker import MeshtasticWorker
@@ -29,6 +31,7 @@ from core import mqtt_check
 from core.node_store import NodeStore, node_record_from_nodedb
 from core import config_writer
 from core.serialize import to_jsonable
+from core.settings import Settings
 from i18n import current_language, lazy_tr, normalize_language, tr
 from server import events as ev
 from server.bridge_manager import BridgeManager, list_serial_ports
@@ -138,12 +141,17 @@ class MeshSession:
         self.metrics = MeshMetrics()
         self.messages = MessageStore()
         self._pending_replies: dict = {}   # (chave, texto) → reply_id até a mensagem sair
+        self._pending_auto: set = set()     # (chave, texto) das respostas automáticas a sair
         self._reply_lock = threading.Lock()
         self.favorites = FirmwareFavorites()
         self.config_lock = ConfigLock()
         self.bridge = BridgeManager()
         self.log = LogStream(broadcast)
         self.log.attach()
+
+        # Respostas automáticas (core/automations.py), ao lado do server.json.
+        self.automations = auto.AutomationEngine(
+            Settings(filename="automations.json", directory=os.path.dirname(config.path)))
 
         self.worker: Optional[MeshtasticWorker] = None
         self.connected = False
@@ -483,6 +491,7 @@ class MeshSession:
         key, entry = stored
         self._broadcast(ev.MESSAGE, {"key": key, "message": to_jsonable(entry),
                                      "unread": self.messages.unread()})
+        self._run_automations(channel, from_id, text, packet or {}, entry["direct"])
 
     def mark_read(self, key: str):
         """Lida num cliente é lida em todos: o contador vive no servidor,
@@ -493,14 +502,87 @@ class MeshSession:
     def _on_channel_message_sent(self, channel: int, text: str, packet_id: int):
         key, entry = self.messages.add_outgoing_channel(
             channel, text, packet_id, self._take_reply(channel_key(channel), text))
+        self._mark_auto(key, text, entry)
         self._message_sent(packet_id, "channel")
         self._broadcast(ev.MESSAGE_SENT, {"key": key, "message": to_jsonable(entry)})
 
     def _on_dm_sent(self, dest_id: str, text: str, pki: bool, packet_id: int):
         key, entry = self.messages.add_outgoing_dm(
             dest_id, text, pki, packet_id, self._take_reply(dm_key(dest_id), text))
+        self._mark_auto(key, text, entry)
         self._message_sent(packet_id, "dm")
         self._broadcast(ev.MESSAGE_SENT, {"key": key, "message": to_jsonable(entry)})
+
+    # -- automações -------------------------------------------------------
+    def _mesh_view(self) -> auto.MeshView:
+        return auto.MeshView(nodes=self.nodes, local_position=self.local_position,
+                             is_favorite=self.favorites.is_favorite,
+                             signal_log=self.automations.signal_log)
+
+    def _run_automations(self, channel: int, from_id: str, text: str, packet: dict,
+                         direct: bool):
+        if not self.automations.enabled:
+            return
+        request = auto.Request(from_id=from_id, text=text,
+                               channel=None if direct else int(channel), packet=packet)
+        try:
+            decision = self.automations.handle(request, self._mesh_view())
+        except Exception:
+            logger.exception("automações: erro ao tratar %r de %s", text, from_id)
+            return
+        if decision is None:
+            return
+        where = "DM" if decision.channel is None else f"canal {decision.channel}"
+        logger.info("automação: %s pediu %s (%s) → %s", from_id, decision.command,
+                    where, decision.outcome)
+        self._broadcast(ev.AUTOMATION_LOG, {"entry": decision.log_entry})
+        if decision.outcome == auto.SENT:
+            # Um pouco depois: o ACK da mensagem recebida sai primeiro.
+            self.loop.single_shot(auto.REPLY_DELAY_MS, self._send_automation, decision)
+
+    def _send_automation(self, decision: auto.Decision):
+        if decision.channel is None:
+            key = dm_key(decision.to_id)
+            with self._reply_lock:
+                self._pending_auto.add((key, decision.reply))
+            self.send_dm(decision.to_id, decision.reply, decision.reply_id)
+        else:
+            key = channel_key(decision.channel)
+            with self._reply_lock:
+                self._pending_auto.add((key, decision.reply))
+            self.send_channel_message(decision.channel, decision.reply, decision.reply_id)
+
+    def _mark_auto(self, key: str, text: str, entry: dict):
+        with self._reply_lock:
+            if (key, text) in self._pending_auto:
+                self._pending_auto.discard((key, text))
+                entry["auto"] = True
+
+    def automations_state(self) -> dict:
+        """Para o separador: configuração, textos por omissão (no idioma do
+        servidor, que é o das respostas) e registo."""
+        from i18n import get_language, use_language
+        with use_language(get_language()):
+            defaults = {key: auto.default_template(key) for key in auto.BUILTINS}
+            lang = get_language()
+        return {"config": self.automations.config,
+                "defaults": defaults,
+                "words": {key: list(b.words) for key, b in auto.BUILTINS.items()},
+                "variables": list(auto.VARIABLES),
+                # O nome que o "ajuda" usa, no idioma do servidor.
+                "labels": {key: b.label.get(lang, b.label["en"]) for key, b in auto.BUILTINS.items()},
+                "airtime_limit": auto.AIRTIME_LIMIT_PCT,
+                "max_bytes": auto.MAX_REPLY_BYTES,
+                "log": self.automations.log()}
+
+    def save_automations(self, payload: dict) -> dict:
+        config = self.automations.save(payload)
+        logger.info("automações gravadas (%s)", "ligadas" if config["enabled"] else "desligadas")
+        self._broadcast(ev.AUTOMATIONS, {"enabled": config["enabled"]})
+        return self.automations_state()
+
+    def preview_automation(self, command: str, template: str) -> dict:
+        return self.automations.preview(command, template, self._mesh_view())
 
     def _message_sent(self, packet_id: int, kind: str):
         ts = time.time()
@@ -532,6 +614,7 @@ class MeshSession:
     def _on_raw_packet(self, packet: dict):
         now = time.time()
         self.metrics.ingest_raw_packet(packet, now)
+        self.automations.signal_log.record(packet)
         self._remember(mh.PACKET, now, mh.distill_packet(packet))
         self._packet_times.append(now)
         snr = packet.get("rxSnr")
@@ -612,6 +695,8 @@ class MeshSession:
             "config_lock":    self.config_lock.state(),
             "serial_ports":   list_serial_ports(),
             "log":            self.log.backlog(),
+            "automations":    {"enabled": self.automations.enabled,
+                               "log": self.automations.log()},
         }
 
     # ------------------------------------------------------------------

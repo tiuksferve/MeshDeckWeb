@@ -218,6 +218,7 @@ class MessageStore:
             "reply_id":      int(reply_id or 0),   # packet_id da mensagem respondida
             "status":        "sending" if outgoing else "",
             "status_detail": "",
+            "auto":          False,       # resposta automática (core/automations.py)
         }
 
     def _append(self, key: str, entry: dict, count_unread: bool):

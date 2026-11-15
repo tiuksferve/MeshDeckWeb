@@ -930,3 +930,78 @@ def test_metrics_use_the_device_date_format(server):
         with i18n.use_date_style(i18n.parse_date_style(style)):
             assert i18n.fmt_datetime(started, seconds=True) in pages[style]
     assert pages["pt-PT.dmy.24"] != pages["en-US.mdy.12"]
+
+
+# ── automações ───────────────────────────────────────────────────────────────
+
+def enable_automations(server, **changes):
+    state = server["client"].get("/api/automations").get_json()
+    config = {**state["config"], "enabled": True, **changes}
+    response = server["client"].post("/api/automations", json=config)
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()
+
+
+def test_automations_require_login(server):
+    assert server["client"].get("/api/automations").status_code == 401
+    assert server["client"].post("/api/automations", json={}).status_code == 401
+
+
+def test_automations_start_disabled(server):
+    login(server)
+    state = server["client"].get("/api/automations").get_json()
+    assert state["config"]["enabled"] is False
+    assert "ping" in state["defaults"] and "{short}" in state["defaults"]["ping"]
+    assert server["mesh"].snapshot()["automations"]["enabled"] is False
+
+
+def test_invalid_automations_are_refused_with_a_message(server):
+    login(server)
+    response = server["client"].post("/api/automations", json={"cooldown_s": 0})
+    assert response.status_code == 400
+    assert response.get_json()["error"]
+
+
+def test_dm_ping_is_answered_automatically(wired):
+    server, iface = wired
+    enable_automations(server)
+    emit_text(packet("TEXT_MESSAGE_APP", PEER_NUM, to=LOCAL_NUM, to_id=LOCAL_ID, id=0x4242,
+                     hopStart=3, hopLimit=3, rxSnr=7.25, rxRssi=-90,
+                     decoded={"text": "Ping"}), iface)
+    log = wait_for(server["broadcasts"], "automation_log")[-1]["entry"]
+    assert log["outcome"] == "sent" and log["command"] == "ping"
+    sent = wait_for(server["broadcasts"], "message_sent", timeout=5)[-1]
+    assert sent["key"] == f"dm:{PEER_ID}"
+    assert sent["message"]["auto"] is True
+    assert sent["message"]["reply_id"] == 0x4242
+    out = iface.sent_text[-1]
+    assert out["destinationId"] == PEER_ID and out["replyId"] == 0x4242
+    # O NodeStore do teste não tem o nome do nó: fica o fim do id.
+    assert out["text"] == "🏓 pong 0001 · direct · SNR 7.2 dB · RSSI -90 dBm · RF"
+
+
+def test_channel_commands_wait_until_the_channel_is_chosen(wired):
+    server, iface = wired
+    enable_automations(server)
+    emit_text(packet("TEXT_MESSAGE_APP", PEER_NUM, channel=0, id=1,
+                     decoded={"text": "ping"}), iface)
+    wait_for(server["broadcasts"], "message")
+    import time
+    time.sleep(0.2)
+    assert not [p for name, p in server["broadcasts"] if name == "automation_log"]
+
+    enable_automations(server, channels=[0], cooldown_s=5)
+    emit_text(packet("TEXT_MESSAGE_APP", PEER_NUM, channel=0, id=2,
+                     decoded={"text": "ping"}), iface)
+    sent = wait_for(server["broadcasts"], "message_sent", timeout=5)[-1]
+    assert sent["key"] == "ch:0" and sent["message"]["auto"] is True
+    assert iface.sent_text[-1]["channelIndex"] == 0
+
+
+def test_automation_preview_endpoint(server):
+    login(server)
+    response = server["client"].post("/api/automations/preview",
+                                     json={"command": "time", "template": "{time}!"})
+    data = response.get_json()
+    assert response.status_code == 200 and data["text"].endswith("!")
+    assert data["bytes"] == len(data["text"].encode())
