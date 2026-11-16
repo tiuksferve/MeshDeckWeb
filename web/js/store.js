@@ -24,6 +24,7 @@ class Store extends EventTarget {
     this.metricSections = [];        // [{key, label, windowed}]
     this.favorites = new Set();
     this.configLock = { held_by: null };
+    this.automations = { enabled: false, log: [] };   // registo das respostas automáticas
 
     // Mensagens: conversations[key] = [entry, ...], chave "ch:<n>" ou "dm:<id>"
     this.conversations = new Map();
@@ -57,6 +58,7 @@ class Store extends EventTarget {
     this.metricSections = snapshot.metric_sections || [];
     this.favorites = new Set(snapshot.favorites || []);
     this.configLock = snapshot.config_lock || this.configLock;
+    this.automations = snapshot.automations || { enabled: false, log: [] };
     setSnrLevels(snapshot.snr_levels);
 
     this.conversations.clear();
@@ -102,6 +104,17 @@ class Store extends EventTarget {
   applyReconnect(payload) {
     this.reconnect = payload;
     this.emit('connection-changed');
+  }
+
+  applyAutomations(payload) {
+    this.automations.enabled = Boolean(payload?.enabled);
+    this.emit('automations-changed');
+  }
+
+  applyAutomationLog(payload) {
+    if (!payload?.entry) return;
+    this.automations.log = [payload.entry, ...this.automations.log].slice(0, 50);
+    this.emit('automations-log');
   }
 
   applyMqttStatus(payload) {

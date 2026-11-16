@@ -277,7 +277,7 @@ function renderConversation() {
     const canReply = !entry.outgoing && entry.packet_id;
     return `${sep}
       <div class="msg ${entry.outgoing ? 'out' : ''} ${rf ? 'rf' : ''}">
-        <div class="meta"><b>${escapeHtml(fromLabel)}</b><span>${transportLabel(entry)}</span>
+        <div class="meta"><b>${escapeHtml(fromLabel)}</b>${entry.auto ? `<span class="auto-mark">${escapeHtml(t('🤖 automática'))}</span>` : ''}<span>${transportLabel(entry)}</span>
           <span>${fmtTime(entry.time)}</span>
           ${entry.hops != null ? `<span>· ${entry.hops} hop${entry.hops === 1 ? '' : 's'}</span>` : ''}
           ${canReply ? `<button type="button" class="reply-btn" data-reply="${entry.packet_id}" title="${escapeHtml(t('Responder'))}">↩</button>` : ''}

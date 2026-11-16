@@ -118,6 +118,35 @@ com valores acumulados). O texto das mensagens nunca fica lá.
 | 📏 Alcance & Links | **Alcance directo** (0 hops) a partir do nó local, **quem mais retransmite**, distâncias dos links NeighborInfo |
 | ⏰ Intervalos | Tempo médio entre pacotes por nó |
 
+### 🤖 Automações
+
+O servidor responde sozinho a comandos, também com o browser fechado. Alguém
+envia `ping` ao nó e recebe, como resposta à mensagem dele,
+`🏓 pong P1 · 2 saltos · último salto SNR 6.5 dB · RSSI -98 dBm · RF`.
+
+- Um comando é a **mensagem inteira**, uma palavra: `ping`, `Ping!` e `ping?`
+  respondem, "fiz ping" não. Funcionam as palavras em português e em inglês
+- Incluídos: `ping` (saltos e sinal da mensagem) · `ajuda` (os comandos
+  activos) · `info` (tempo ligado, bateria, utilização do canal, tempo de
+  antena) · `sinal` (como o servidor ouve quem pergunta: SNR/RSSI médio dos
+  pacotes directos dele na última hora) · `nos` (nós ouvidos em 1 h e em
+  24 h, os directos) · `dist` (distância e rumo) · `pos` (posição deste nó) ·
+  `hora`
+- **Comandos personalizados**: uma palavra e uma resposta fixa, como
+  `regras` → "Sem spam neste canal"
+- Cada resposta é um modelo editável com variáveis (`{short}`, `{hops}`,
+  `{signal}`, `{battery}`, …) e pré-visualização com dados reais e o tamanho
+  em bytes. As respostas saem no idioma do servidor
+- Responde a **DMs** e, se escolhidos, nos **canais**; cada comando para
+  todos ou só para favoritos (`pos` e `dist` começam só para favoritos)
+- **Travões**, porque o tempo de antena é de todos: vem desligado, intervalo
+  mínimo por nó (30 s), respostas por minuto (5), pausa quando o nó já usou
+  8% do tempo de antena na última hora (o limite da EU_868 é 10%), pedidos
+  por MQTT ignorados, e nunca responde a uma resposta, para dois bots não
+  ficarem a falar um com o outro
+- **Registo** dos comandos recebidos e do que se fez com cada um; as
+  respostas automáticas aparecem marcadas com 🤖 nas Mensagens
+
 ### 🔐 Acesso e Idiomas
 
 - Login com password; a sessão pode ficar lembrada em cada browser
@@ -335,6 +364,7 @@ As preferências ficam em `~/.config/meshdeck/` (ou `$XDG_CONFIG_HOME/meshdeck/`
 |----------|----------|
 | `server.json` | Chave de sessão, hash da password, endereço, definições HTTPS |
 | `settings.json` | Idioma do servidor (terminal, logs) e outras preferências |
+| `automations.json` | Automações: comandos, modelos de resposta e travões |
 | `tls/` | CA local e certificado do servidor (as chaves privadas só são legíveis por si) |
 | `metrics/` | Histórico das métricas dos últimos 7 dias, um ficheiro SQLite por nó local (no máximo 50 MB cada; a escrita pára com menos de 100 MB livres no disco). "🗑 limpar métricas" esvazia-o |
 

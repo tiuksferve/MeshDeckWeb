@@ -714,6 +714,11 @@ class MeshtasticWorker:
                                  'replyId': (packet.get('decoded') or {}).get('replyId') or 0},
                 'id':           packet.get('id') or 0,
                 'hopsAway':     None,
+                # Como esta mensagem chegou, para as automações (core/automations.py).
+                'hopStart':     packet.get('hopStart'),
+                'hopLimit':     packet.get('hopLimit'),
+                'rxSnr':        packet.get('rxSnr'),
+                'rxRssi':       packet.get('rxRssi'),
             }
             # Tenta obter hopsAway do NodeDB (mais fiável que hopLimit do pacote)
             try:

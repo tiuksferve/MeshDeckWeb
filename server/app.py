@@ -327,6 +327,31 @@ def create_app(config: ServerConfig = None) -> tuple:
             return jsonify({"error": tr("pedido inválido")}), 400
         return config_call(lambda: mesh.save_channels(client_id(), channels))
 
+    # ------------------------------------------------------------------
+    # Automações (respostas automáticas a comandos)
+    # ------------------------------------------------------------------
+    @app.get("/api/automations")
+    @login_required
+    def api_automations():
+        return jsonify(mesh.automations_state())
+
+    @app.post("/api/automations")
+    @login_required
+    def api_automations_save():
+        try:
+            return jsonify(mesh.save_automations(request.get_json(silent=True)))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @app.post("/api/automations/preview")
+    @login_required
+    def api_automations_preview():
+        payload = request.get_json(silent=True) or {}
+        command, template = payload.get("command"), payload.get("template")
+        if not isinstance(command, str) or not isinstance(template, str):
+            return jsonify({"error": tr("pedido inválido")}), 400
+        return jsonify(mesh.preview_automation(command, template[:1000]))
+
     @app.get("/api/serial-ports")
     @login_required
     def api_serial_ports():

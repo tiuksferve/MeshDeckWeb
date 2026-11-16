@@ -6,7 +6,7 @@ import pytest
 
 from tests.ui.conftest import PASSWORD, node_id
 
-TABS = ("nodes", "map", "messages", "navigation", "metrics", "config")
+TABS = ("nodes", "map", "messages", "navigation", "metrics", "automations", "config")
 
 
 def test_login_rejects_wrong_password_then_opens_app(anonymous_page):

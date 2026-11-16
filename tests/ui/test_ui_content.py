@@ -2,6 +2,7 @@
 Testes de interface: mensagens, métricas e configuração do nó.
 """
 
+import os
 import pytest
 
 from core.metrics import SECTION_KEYS
@@ -138,3 +139,21 @@ def test_config_sections_open_with_fields(page):
         page.click(f"#config-list li[data-key=\"{key}\"]")
         page.wait_for("document.querySelector('#config-body input, #config-body select')",
                       message=f"a secção {key} da configuração não tem campos")
+
+
+def test_phone_back_button_is_easy_to_tap(page):
+    page.viewport(390, 844, mobile=True, touch=True)
+    try:
+        open_conversation(page, "ch:0")
+        page.wait_for("document.querySelector('.messages-layout.conv-open')", message="a conversa não abriu")
+        box = page.js("(() => { const r = document.getElementById('conv-back').getBoundingClientRect();"
+                      " return {w: r.width, h: r.height}; })()")
+        assert box["h"] >= 44 and box["w"] >= 44, f"botão de voltar pequeno demais: {box}"
+        assert "Chats" in page.text("#conv-back") or "Conversas" in page.text("#conv-back")
+        if os.environ.get("MESHDECK_SHOT"):
+            page.screenshot(os.environ["MESHDECK_SHOT"])
+        page.click("#conv-back")
+        page.wait_for("!document.querySelector('.messages-layout.conv-open')",
+                      message="o botão não voltou à lista de conversas")
+    finally:
+        page.viewport(1280, 820)

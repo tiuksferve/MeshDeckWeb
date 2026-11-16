@@ -11,6 +11,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **🤖 Automations tab: the server answers commands on its own**, also with
+  the browser closed. A command is the whole message, one word (`ping`,
+  `Ping!`; "I sent a ping" is not one), in Portuguese or English. Built in:
+  `ping` (hops counted from the packet, SNR/RSSI, RF or MQTT), `help`,
+  `info`, `signal` (average SNR/RSSI of the sender's direct packets in the
+  last hour), `nodes`, `dist`, `pos` and `time`, plus custom commands with a
+  fixed reply. Each reply is an editable template with variables and a
+  preview with real data and its size in bytes; replies go out in the
+  server's language, as a native reply to the command. DMs and, when chosen,
+  channels; each command for everyone or favourites only. Off by default,
+  with limits: interval per node, replies per minute, a pause at 8% airtime
+  in the last hour (EU_868 allows 10%), MQTT requests ignored, and replies
+  to replies never answered, so two bots cannot loop. A live log shows each
+  command and what was done; automatic replies are marked 🤖 in Messages.
+  Settings in `~/.config/meshdeck/automations.json`.
+
 - **⚠ Warning when the node's MQTT server does not answer.** With MQTT on and
   the server unreachable, meshtasticd stops for about 2 minutes on every
   connection attempt (it does not answer apps, messages are delayed), which
