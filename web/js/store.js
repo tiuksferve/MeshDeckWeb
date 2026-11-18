@@ -178,6 +178,11 @@ class Store extends EventTarget {
     this.emit('traceroute', payload);
   }
 
+  /* Outro nó fez traceroute ao nó local: { from, to, forward, via_mqtt, time }. */
+  applyTracerouteRequest(payload) {
+    this.emit('traceroute-request', payload);
+  }
+
   applyPacket(payload) {
     this.emit('packet', payload);
   }

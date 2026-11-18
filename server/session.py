@@ -339,6 +339,7 @@ class MeshSession:
         worker.message_status_updated.connect(self._on_message_status)
 
         worker.traceroute_result.connect(self._on_traceroute_result)
+        worker.traceroute_request.connect(self._on_traceroute_request)
         worker.neighbor_info_received.connect(self._on_neighbor_info)
         worker.position_sent.connect(
             lambda ok, message: self._broadcast(ev.POSITION_SENT,
@@ -604,6 +605,12 @@ class MeshSession:
         payload = ev.traceroute_result(forward, back, origin, dest)
         payload["time"] = time.time()
         self._broadcast(ev.TRACEROUTE, payload)
+
+    def _on_traceroute_request(self, from_id: str, edges: list, via_mqtt: bool):
+        local_id = edges[-1][1] if edges else ""
+        payload = ev.traceroute_request(from_id, edges, via_mqtt, local_id)
+        payload["time"] = time.time()
+        self._broadcast(ev.TRACEROUTE_REQUEST, payload)
 
     def _on_neighbor_info(self, from_id: str, neighbors: list):
         self.metrics.ingest_neighbor_info(from_id, neighbors)

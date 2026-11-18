@@ -56,6 +56,10 @@ def _clean_text(value):
     return value.encode("utf-8", errors="replace").decode("utf-8")
 
 
+class _SkipTraceroute(Exception):
+    """Pacote de traceroute sem resultado para mostrar (pedido ou vazio)."""
+
+
 class MeshtasticWorker:
     """Publica tudo o que acontece na rede Meshtastic através de Signals."""
 
@@ -113,6 +117,7 @@ class MeshtasticWorker:
         self.channel_message_sent   = Signal("channel_message_sent")    # (channel_index: int, text: str, packet_id: int)
         self.message_status_updated = Signal("message_status_updated")  # (request_id: int, status: str, error_reason: str)
         self.traceroute_result      = Signal("traceroute_result")       # (forward_edges: list, back_edges: list, origin: str, dest: str)
+        self.traceroute_request     = Signal("traceroute_request")      # (from_id: str, edges: list, via_mqtt: bool) — outro nó fez traceroute a este
         self.local_node_ready       = Signal("local_node_ready")        # (long_name, short_name, node_id, gps_enabled, has_position)
         self.nodes_batch            = Signal("nodes_batch")             # ([(node_num, node_dict), ...])
         self.nodedb_reset           = Signal("nodedb_reset")            # ()
@@ -353,6 +358,50 @@ class MeshtasticWorker:
         except Exception as e:
             logger.error(f"Error resetting NodeDB: {e}", exc_info=True)
             self._emit(self.error_occurred, lazy_tr("err_reset_nodedb", err=e))
+
+    def _num_to_id(self, n) -> Optional[str]:
+        try:
+            ni = int(n)
+        except (TypeError, ValueError):
+            return None
+        if ni == 0 or ni == 0xFFFFFFFF:
+            return None
+        if self.iface and hasattr(self.iface, 'nodesByNum'):
+            uid = (self.iface.nodesByNum.get(ni) or {}).get('user', {}).get('id', '')
+            if uid:
+                return uid
+        return f"!{ni & 0xffffffff:08x}"
+
+    def _on_traceroute_request(self, packet: dict, tr: dict):
+        """Outro nó fez traceroute a este: rota de ida até aqui, com SNR por salto.
+
+        O firmware responde sozinho; o pedido só chega ao cliente para se
+        poder avisar. O SNR do último salto, se o firmware ainda não o
+        acrescentou, é o rxSnr do próprio pacote.
+        """
+        from_id = self._num_to_id(packet.get('from'))
+        to_id = self._num_to_id(packet.get('to'))
+        local = (self._local_id_known or '').lower()
+        if not from_id or not to_id or (local and to_id.lower() != local):
+            return
+        tr = tr or {}
+        route = [r for r in (tr.get('route') or []) if r]
+        snrs = list(tr.get('snrTowards') or tr.get('snrToward') or [])
+        full = [packet.get('from')] + route + [packet.get('to')]
+        edges = []
+        for i in range(len(full) - 1):
+            a, b = self._num_to_id(full[i]), self._num_to_id(full[i + 1])
+            if not a or not b:
+                continue
+            if i < len(snrs):
+                snr = float(snrs[i]) / 4.0
+            elif i == len(full) - 2 and packet.get('rxSnr') is not None:
+                snr = float(packet['rxSnr'])
+            else:
+                snr = 0.0
+            edges.append((a, b, snr))
+        logger.info(f"Traceroute request from {from_id} ({len(edges)} hop(s))")
+        self._emit(self.traceroute_request, from_id, edges, bool(packet.get('viaMqtt')))
 
     @on_loop
     def send_traceroute(self, dest_id: str, hop_limit: int = 3):
@@ -1108,29 +1157,20 @@ class MeshtasticWorker:
 
             if portnum == 'TRACEROUTE_APP':
                 try:
+                    tr = decoded.get('traceroute', {})
                     want_response = packet.get('wantResponse', False)
                     if want_response:
-                        return
-
-                    tr = decoded.get('traceroute', {})
+                        # Pedido de outro nó: o firmware responde sozinho;
+                        # aqui só se avisa quem está a usar a MeshDeckWeb.
+                        self._on_traceroute_request(packet, tr)
+                        tr = None
                     if not tr:
-                        return
+                        raise _SkipTraceroute
 
                     origin_num = packet.get('to')
                     dest_num   = packet.get('from')
 
-                    def num_to_id(n):
-                        try:
-                            ni = int(n)
-                            if ni == 0 or ni == 0xFFFFFFFF:
-                                return None
-                            if self.iface and hasattr(self.iface, 'nodesByNum'):
-                                uid = self.iface.nodesByNum.get(ni, {}).get('user', {}).get('id', '')
-                                if uid:
-                                    return uid
-                            return f"!{ni & 0xffffffff:08x}"
-                        except (TypeError, ValueError):
-                            return None
+                    num_to_id = self._num_to_id
 
                     forward_edges = []
                     back_edges    = []
@@ -1161,6 +1201,8 @@ class MeshtasticWorker:
                         origin_str = num_to_id(origin_num) or '?'
                         dest_str   = num_to_id(dest_num) or '?'
                         self._emit(self.traceroute_result, forward_edges, back_edges, origin_str, dest_str)
+                except _SkipTraceroute:
+                    pass
                 except Exception as e:
                     logger.debug(f"Error processing TRACEROUTE_APP: {e}", exc_info=True)
                 # Actualiza last_heard e last_packet_type do remetente

@@ -88,6 +88,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A traceroute another node runs to this one is now announced.** The
+  request was dropped before reaching the browser, so nothing showed, on
+  the phone or the desktop. It now shows a notice (who, direct or how many
+  hops, MQTT) with a sound and a **Show route** button, and the route goes
+  into the map's traceroute list. The node itself already answered; that is
+  unchanged.
+
 - **Reconnecting to the node no longer piles up attempts.** The watchdog gave
   up after 12 s, while the Meshtastic library waits 30 s for the node, so a
   new attempt started with the previous one still pending; the failure then

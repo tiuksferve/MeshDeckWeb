@@ -38,6 +38,7 @@ MESSAGE         = "message"           # mensagem recebida
 MESSAGE_SENT    = "message_sent"      # eco de uma mensagem enviada
 MESSAGE_STATUS  = "message_status"    # ACK/NAK por packet id
 TRACEROUTE      = "traceroute"        # resultado de um traceroute
+TRACEROUTE_REQUEST = "traceroute_request"  # outro nó fez traceroute ao nó local
 NEIGHBORS       = "neighbors"         # vizinhança NeighborInfo
 POSITION_SENT   = "position_sent"     # resultado do envio de posição
 PACKET          = "packet"            # projecção compacta de um pacote
@@ -143,6 +144,11 @@ def traceroute_result(forward_edges, back_edges, origin, dest) -> dict:
 
     return {"forward": edges(forward_edges), "back": edges(back_edges),
             "origin": origin, "dest": dest}
+
+
+def traceroute_request(from_id: str, edges, via_mqtt: bool, local_id: str) -> dict:
+    return {"from": from_id, "to": local_id, "via_mqtt": bool(via_mqtt),
+            "forward": [{"from": a, "to": b, "snr": snr} for a, b, snr in edges]}
 
 
 def neighbor_info_received(from_id: str, neighbors: list) -> dict:

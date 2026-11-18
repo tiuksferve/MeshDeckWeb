@@ -425,6 +425,31 @@ def test_traceroute_request_is_not_treated_as_a_result(wired):
     assert rec["traceroute_result"] == []
 
 
+def test_traceroute_request_to_local_node_is_announced(wired):
+    """Outro nó fez traceroute a este: rota de ida com SNR; o último salto vem do rxSnr."""
+    worker, iface, rec = wired
+    worker._connected = True
+    worker._local_id_known = LOCAL_ID
+    mid = 0x22220002
+    iface.nodesByNum[mid] = {"num": mid, "user": {"id": "!22220002"}}
+    emit_packet(packet("TRACEROUTE_APP", PEER_NUM, to=LOCAL_NUM, wantResponse=True, rx_snr=6.5,
+                       decoded={"traceroute": {"route": [mid], "snrTowards": [20]}}), iface)
+    from_id, edges, via_mqtt = rec.wait("traceroute_request")[0]
+    assert from_id == PEER_ID and via_mqtt is False
+    assert edges == [(PEER_ID, "!22220002", 5.0), ("!22220002", LOCAL_ID, 6.5)]
+    assert rec.wait("node_updated")[-1][0] == PEER_ID, "o pedido não actualizou o 'ouvido há'"
+
+
+def test_traceroute_request_to_another_node_is_ignored(wired):
+    worker, iface, rec = wired
+    worker._connected = True
+    worker._local_id_known = LOCAL_ID
+    emit_packet(packet("TRACEROUTE_APP", PEER_NUM, to=0x33330003, wantResponse=True,
+                       decoded={"traceroute": {"route": []}}), iface)
+    rec.quiesce(worker.loop)
+    assert rec["traceroute_request"] == []
+
+
 def test_neighbor_info_realtime(wired):
     worker, iface, rec = wired
     worker._connected = True
