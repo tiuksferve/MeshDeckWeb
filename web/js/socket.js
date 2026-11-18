@@ -47,6 +47,10 @@ export function connectSocket(onToast) {
   socket.on('unread', (payload) => store.applyUnread(payload));
   socket.on('favorites', (payload) => store.applyFavorites(payload));
   socket.on('traceroute', (payload) => store.applyTraceroute(payload));
+  socket.on('traceroute_request', (payload) => {
+    store.applyTracerouteRequest(payload);
+    playMessageSound('dm');
+  });
   socket.on('neighbors', (payload) => store.applyNeighbors(payload));
   socket.on('packet', (payload) => store.applyPacket(payload));
   socket.on('packet_stats', (payload) => store.applyPacketStats(payload));

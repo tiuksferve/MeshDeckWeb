@@ -92,6 +92,9 @@ export function mount() {
   store.on('packet', onPacket);
   store.on('neighbors', onNeighbors);
   store.on('traceroute', onTraceroute);
+  store.on('traceroute-request', (req) => onTraceroute({
+    origin: req.from, dest: req.to, forward: req.forward || [], back: [],
+  }));
 }
 
 /* Chamado pelo app.js sempre que a aba do mapa fica visível — o Leaflet

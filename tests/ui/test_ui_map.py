@@ -202,3 +202,21 @@ def test_gps_list_pin_opens_the_map_on_that_node(page):
                   message="o 📍 não abriu o mapa")
     page.wait_for("document.querySelector('.leaflet-popup-content')?.innerText.includes('T-Beam Tiago')",
                   message="o mapa não abriu o popup do nó escolhido")
+
+
+def test_traceroute_from_another_node_is_announced(page, ui_server):
+    """Outro nó fez traceroute a este: aviso com "Show route", resultado e entrada na lista do mapa."""
+    mesh = ui_server["mesh"]
+    peer, relay = node_id(2), node_id(3)
+    mesh.loop.post(lambda: mesh._on_traceroute_request(
+        peer, [(peer, relay, 5.0), (relay, LOCAL_ID, 6.5)], False))
+    page.wait_for("[...document.querySelectorAll('.toast-action')].some((t) => t.textContent.includes('ran a traceroute to this node'))",
+                  message="sem aviso do traceroute recebido")
+    toast = page.js("[...document.querySelectorAll('.toast-action')].pop().textContent")
+    assert "1 hop" in toast, toast
+    page.js("[...document.querySelectorAll('.toast-action')].pop().querySelector('button:not(.ghost)').click()")
+    page.wait_for("document.querySelector('.modal-card .tr-result')", message="o botão não abriu a rota")
+    result = page.text(".modal-card .tr-result")
+    assert "+5.0 dB" in result and "+6.5 dB" in result
+    page.js("document.querySelector('.modal-overlay .modal-close').click()")
+    assert page.js("document.querySelectorAll('#tr-list li[data-id]').length") >= 1

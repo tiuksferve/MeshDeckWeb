@@ -31,6 +31,7 @@ export function mount(options) {
   hasTracerouteWith = options.hasTracerouteWith;
   drawableSegments = options.drawableSegments;
   store.on('traceroute', onResult);
+  store.on('traceroute-request', onRequest);
 }
 
 function nodeName(nodeId) {
@@ -142,6 +143,46 @@ async function onResult(payload) {
     return;
   }
   showResult({ origin, dest, forward, back, isMine });
+}
+
+/* Outro nó fez traceroute a este. O firmware já respondeu; aqui só se
+   avisa, sem janela a bloquear o ecrã, com um botão para ver a rota de ida. */
+function onRequest(req) {
+  const forward = req.forward || [];
+  const hops = Math.max(forward.length - 1, 0);
+  const path = hops === 0 ? t('tr_req_direct')
+    : (hops === 1 ? t('tr_req_hop_one') : t('tr_req_hops', { n: hops }));
+  const text = t('tr_req_toast', { name: nodeName(req.from) })
+    + ` · ${path}${req.via_mqtt ? ' · MQTT' : ''}`;
+
+  const el = document.createElement('div');
+  el.className = 'toast info toast-action';
+  el.setAttribute('role', 'status');
+  const label = document.createElement('span');
+  label.textContent = text;
+  el.appendChild(label);
+  const close = () => { clearTimeout(timer); el.remove(); };
+  if (forward.length) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'small';
+    btn.textContent = t('tr_req_show');
+    btn.addEventListener('click', () => {
+      close();
+      showResult({ origin: req.from, dest: req.to, forward, back: [], isMine: true });
+    });
+    el.appendChild(btn);
+  }
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'ghost small';
+  dismiss.textContent = '✕';
+  dismiss.title = t('Fechar');
+  dismiss.setAttribute('aria-label', t('Fechar'));
+  dismiss.addEventListener('click', close);
+  el.appendChild(dismiss);
+  document.getElementById('toasts').appendChild(el);
+  const timer = setTimeout(close, 20000);
 }
 
 function showResult({ origin, dest, forward, back, isMine }) {

@@ -402,6 +402,16 @@ def test_traceroute_result_is_broadcast(wired):
     assert payload["forward"] == [{"from": LOCAL_ID, "to": PEER_ID, "snr": 5.0}]
 
 
+def test_traceroute_request_is_broadcast(wired):
+    server, iface = wired
+    emit_packet(packet("TRACEROUTE_APP", PEER_NUM, to=LOCAL_NUM, wantResponse=True, rx_snr=7.0,
+                       decoded={"traceroute": {"route": []}}), iface)
+    payload = wait_for(server["broadcasts"], "traceroute_request")[-1]
+    assert payload["from"] == PEER_ID and payload["to"] == LOCAL_ID
+    assert payload["forward"] == [{"from": PEER_ID, "to": LOCAL_ID, "snr": 7.0}]
+    assert payload["via_mqtt"] is False and payload["time"] > 0
+
+
 def test_neighbor_info_is_broadcast_and_fed_to_metrics(wired):
     server, iface = wired
     emit_packet(packet("NEIGHBORINFO_APP", PEER_NUM, decoded={

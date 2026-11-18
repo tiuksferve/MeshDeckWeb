@@ -586,6 +586,9 @@ tbody tr:hover td { background: var(--input); }
 .tr-legend { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
 /* Aviso com contagem decrescente (traceroute a aguardar resposta). */
 .toast.info { border-color: var(--blue); }
+.toast-action { display: flex; align-items: center; gap: 8px; }
+.toast-action > span { flex: 1; min-width: 0; }
+.toast-action > button { flex-shrink: 0; min-height: 36px; }
 
 /* ── tema escuro do mapa: filtro CSS sobre o OpenStreetMap (ver map.js) ─── */
 .theme-dark-filter .leaflet-tile-pane {
