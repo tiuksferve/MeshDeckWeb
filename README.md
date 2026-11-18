@@ -332,6 +332,48 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 
 ---
 
+## 🧩 Local API
+
+Programs on the same machine can read the node and send messages through
+MeshDeckWeb. `meshtasticd` accepts a single client and MeshDeckWeb is that
+client, so a companion program (such as the
+DashOS ESP32 display on the uConsole) asks
+MeshDeckWeb instead of opening a second connection, which would drop
+MeshDeckWeb's.
+
+It is **off by default**. Turn it on once, the setting is saved:
+
+```bash
+python3 run_server.py --local-api on      # --local-api off turns it off again
+```
+
+| Route | Body | Answer |
+|---|---|---|
+| `GET /api/local/dash` | — | Local node and position, node counts, unread per conversation, channels, up to 100 nodes (without public keys) and the 30 latest messages |
+| `POST /api/local/send` | `{"text": "..", "channel": 0}` or `{"text": "..", "dest": "!abcd1234"}` | `{"ok": true, "key": "ch:0"}`. Text up to 200 bytes (UTF-8), channel 0–7 |
+| `POST /api/local/read` | `{"key": "ch:0"}` or `{"all": true}` | Marks the conversation as read, also in the browser |
+
+Each message carries `key`, `time`, `text`, `outgoing`, `direct`, `status`
+(of messages sent), `from_id`/`from`, `to_id`/`to`, `channel` (name, empty
+for DMs), `transport` (`rf`, `mqtt`, `pki` or `psk`) and `hops`.
+
+```bash
+curl -s http://127.0.0.1:8080/api/local/dash
+curl -s -X POST http://127.0.0.1:8080/api/local/send \
+     -H 'Content-Type: application/json' -d '{"text": "Hello", "channel": 0}'
+```
+
+- **Off:** the routes answer `404` like any unknown route; nothing else changes.
+- **On:** they only answer requests from `127.0.0.1` or `::1` (`403` from
+  anywhere else) and ask for **no login**: any program or user on this
+  machine can read the messages and send through the node. Leave it off on
+  machines shared with other users.
+- Errors: `400` (empty or too long text, invalid channel or destination),
+  `503` (no node connected).
+- Use the HTTP port (`8080`, or the one given with `--port`); it stays open when HTTPS is on.
+
+---
+
 ## 🌍 Internet Access
 
 Everything is served by the machine itself — interface, libraries and metric
@@ -376,7 +418,7 @@ list view, metrics chart window) stay in each browser.
 meshdeckweb/
 ├── install.py             ← Guided setup (venv, password, node, HTTPS, offline map, start shortcut, menu icon)
 ├── run_server.py          ← Entry point and command-line options
-├── server/                ← Flask + Socket.IO: HTTP API, login, HTTPS, serial bridge
+├── server/                ← Flask + Socket.IO: HTTP API, local API, login, HTTPS, serial bridge
 ├── core/                  ← Node connection, nodes, messages, configuration, metrics
 ├── web/                   ← Browser interface (HTML, CSS, JavaScript, vendored Leaflet/Socket.IO)
 ├── i18n.py                ← PT/EN translations

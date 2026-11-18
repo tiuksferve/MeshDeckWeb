@@ -27,3 +27,8 @@ is credited in the CHANGELOG, unless you prefer to stay anonymous.
 MeshDeckWeb is designed for a home or field network, not for direct exposure
 to the internet. To reach it from outside, use a VPN such as Tailscale or
 WireGuard rather than forwarding the port on your router.
+
+The local API (`--local-api on`, off by default) answers only requests from
+the machine itself, without a login: any program or user on that machine
+can read the messages and send through the node. Leave it off on machines
+shared with other users.
