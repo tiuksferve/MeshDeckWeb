@@ -265,6 +265,7 @@ are remembered for the next runs.
 | `--tls-cert`, `--tls-key` | Use your own certificate instead |
 | `--no-tls` | Turn HTTPS off (HTTP only) and exit |
 | `--tile-cache-mb` | Space for the offline map (default `200`, `0` = keep nothing) |
+| `--local-api on\|off` | Local `/api/local/*` API for programs on this machine, e.g. the DashOS ESP32 display (default `off`, saved) |
 | `--debug` | Detailed logging (e.g. each LocalStats received) |
 
 > ⚠️ Anyone who logs in can reconfigure the node, channels and PSKs included.

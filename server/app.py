@@ -32,6 +32,7 @@ from i18n import (LANGUAGES, get_language, has_lazy, normalize_language, parse_d
 from server import events as ev
 from server import tls
 from server.tile_cache import TileCache
+from server.local_api import register_local_api
 from server.auth import (LoginThrottle, ServerConfig, is_authenticated, login, login_required,
                          logout)
 from server.bridge_manager import list_serial_ports
@@ -548,5 +549,8 @@ def create_app(config: ServerConfig = None) -> tuple:
         with use_language(lang):
             socketio.emit(ev.SNAPSHOT, mesh.snapshot(), to=request.sid)
         return mesh.metric_sections(lang)
+
+    # API só para a própria máquina (DashOS e afins), opcional: ver server/local_api.py
+    register_local_api(app, mesh, is_local_request, lambda: config.local_api)
 
     return app, socketio, mesh

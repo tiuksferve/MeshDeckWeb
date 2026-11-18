@@ -41,6 +41,7 @@ def parse_args():
     p.add_argument("--tls-key", metavar=tr("FICHEIRO"), help=tr("help_tls_key"))
     p.add_argument("--https-port", type=int, metavar=tr("PORTA"), help=tr("help_https_port"))
     p.add_argument("--tile-cache-mb", type=int, metavar="MB", help=tr("help_tile_cache_mb"))
+    p.add_argument("--local-api", choices=("on", "off"), help=tr("help_local_api"))
     p.add_argument("--no-tls", action="store_true", help=tr("help_no_tls"))
     p.add_argument("--debug", action="store_true", help=tr("help_debug"))
     return p.parse_args()
@@ -138,6 +139,8 @@ def main():
         config.set_https_port(args.https_port)
     if args.tile_cache_mb is not None:
         config.set_tile_cache_mb(args.tile_cache_mb)
+    if args.local_api is not None:
+        config.set_local_api(args.local_api == "on")
     if args.make_cert is not None:
         return make_certificate(config, args.make_cert)
     if args.no_tls:

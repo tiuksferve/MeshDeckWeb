@@ -119,6 +119,14 @@ class ServerConfig:
         self._s.set_value("tile_cache_mb", max(int(megabytes), 0))
 
     @property
+    def local_api(self) -> bool:
+        """API /api/local/* para programas da própria máquina (ex.: DashOS). Desligada por omissão."""
+        return bool(self._s.value("local_api", False, type=bool))
+
+    def set_local_api(self, enabled: bool):
+        self._s.set_value("local_api", bool(enabled))
+
+    @property
     def metrics_node(self) -> str:
         """Nó local do último histórico de métricas, reposto no arranque."""
         return self._s.value("metrics_node", "") or ""
