@@ -268,6 +268,7 @@ escolhidos ficam guardados para as execuções seguintes.
 | `--tls-cert`, `--tls-key` | Usar um certificado próprio |
 | `--no-tls` | Desligar o HTTPS (só HTTP) e sair |
 | `--tile-cache-mb` | Espaço para o mapa offline (por omissão `200`, `0` = não guardar) |
+| `--local-api on\|off` | API local `/api/local/*` para programas da própria máquina, ex.: a tela ESP32 DashOS (por omissão `off`, fica guardado) |
 | `--debug` | Registo detalhado (por exemplo, cada LocalStats recebido) |
 
 > ⚠️ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Abra o

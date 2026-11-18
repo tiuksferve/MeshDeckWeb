@@ -1291,6 +1291,8 @@ _STRINGS: dict = {
                        "en": 'HTTPS port, served next to HTTP when there is a certificate (default: the saved one, or 8443)'},
     'help_tile_cache_mb': {"pt": 'limite da cache de mosaicos do mapa, para o mapa funcionar sem internet (default: o guardado, ou 200; 0 = não guardar)',
                           "en": 'size limit of the map tile cache, so the map works without internet (default: the saved one, or 200; 0 = do not store)'},
+    'help_local_api': {"pt": 'API local /api/local/* para programas da própria máquina, ex.: a tela DashOS (default: a guardada, ou off)',
+                       "en": 'local /api/local/* API for programs on this machine, e.g. the DashOS display (default: the saved one, or off)'},
     'help_no_tls': {"pt": 'desactivar HTTPS (ficar só HTTP) e sair',
                    "en": 'disable HTTPS (plain HTTP only) and exit'},
     'help_debug': {"pt": 'logging em DEBUG',
