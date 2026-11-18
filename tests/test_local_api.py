@@ -72,7 +72,16 @@ def test_dash_lists_messages_with_sender_name_and_unread(wired):  # noqa: F811
     assert data["unread"] == {"ch:0": 1} and data["unread_total"] == 1
     msg = data["messages"][0]
     assert msg["text"] == "olá dash" and msg["key"] == "ch:0" and msg["from_id"] == PEER_ID
+    assert msg["transport"] == "rf" and "hops" in msg
     assert "public_key" not in data["nodes"][0] if data["nodes"] else True
+
+
+def test_dash_marks_mqtt_messages(wired):  # noqa: F811
+    server, iface = wired
+    emit_text(packet("TEXT_MESSAGE_APP", PEER_NUM, channel=0, decoded={"text": "via mqtt"}, via_mqtt=True), iface)
+    wait_for(server["broadcasts"], "message")
+    msg = server["client"].get("/api/local/dash").get_json()["messages"][0]
+    assert msg["transport"] == "mqtt"
 
 
 def test_read_clears_unread(wired):  # noqa: F811

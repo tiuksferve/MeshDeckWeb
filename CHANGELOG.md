@@ -56,6 +56,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   machine (`localhost`), and the server refuses the request from anywhere
   else: from the phone there would be no way to start it again.
 
+- **🧩 Local API for programs on this machine** (`--local-api on|off`, off
+  by default and saved). `meshtasticd` takes a single client and
+  MeshDeckWeb is it, so a companion program such as the DashOS ESP32 display
+  on the uConsole reads the node through MeshDeckWeb instead of opening a
+  second connection: `GET /api/local/dash` (local node, counts, unread,
+  channels, nodes without public keys, latest messages with their transport,
+  RF, MQTT, PKI or PSK, and hops), `POST /api/local/send` (channel message or
+  DM, up to 200 bytes) and `POST /api/local/read`. Off, the routes answer
+  404 and nothing changes; on, they answer only `127.0.0.1`/`::1` and need
+  no login. README section "Local API".
+
 ### Changed
 
 - **Tab order:** Nodes, Messages, Map, Navigation, Metrics, Configuration

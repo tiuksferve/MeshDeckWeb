@@ -268,7 +268,7 @@ escolhidos ficam guardados para as execuções seguintes.
 | `--tls-cert`, `--tls-key` | Usar um certificado próprio |
 | `--no-tls` | Desligar o HTTPS (só HTTP) e sair |
 | `--tile-cache-mb` | Espaço para o mapa offline (por omissão `200`, `0` = não guardar) |
-| `--local-api on\|off` | API local `/api/local/*` para programas da própria máquina, ex.: a tela ESP32 DashOS (por omissão `off`, fica guardado) |
+| `--local-api on\|off` | API local `/api/local/*` para programas da própria máquina, ex.: o ecrã ESP32 DashOS (por omissão `off`, fica guardado) |
 | `--debug` | Registo detalhado (por exemplo, cada LocalStats recebido) |
 
 > ⚠️ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Abra o
@@ -338,6 +338,49 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 
 ---
 
+## 🧩 API Local
+
+Programas da própria máquina podem ler o nó e enviar mensagens através do
+MeshDeckWeb. O `meshtasticd` só aceita um cliente e esse cliente é o
+MeshDeckWeb, por isso um programa auxiliar (como o ecrã ESP32
+DashOS do uConsole) pede os dados ao
+MeshDeckWeb em vez de abrir uma segunda ligação, que derrubaria a do
+MeshDeckWeb.
+
+Vem **desligada por omissão**. Ligue-a uma vez, a opção fica guardada:
+
+```bash
+python3 run_server.py --local-api on      # --local-api off volta a desligá-la
+```
+
+| Rota | Corpo | Resposta |
+|---|---|---|
+| `GET /api/local/dash` | — | Nó local e posição, contagem de nós, não lidas por conversa, canais, até 100 nós (sem chaves públicas) e as 30 mensagens mais recentes |
+| `POST /api/local/send` | `{"text": "..", "channel": 0}` ou `{"text": "..", "dest": "!abcd1234"}` | `{"ok": true, "key": "ch:0"}`. Texto até 200 bytes (UTF-8), canal 0–7 |
+| `POST /api/local/read` | `{"key": "ch:0"}` ou `{"all": true}` | Marca a conversa como lida, também no browser |
+
+Cada mensagem traz `key`, `time`, `text`, `outgoing`, `direct`, `status`
+(das enviadas), `from_id`/`from`, `to_id`/`to`, `channel` (nome, vazio nas
+directas), `transport` (`rf`, `mqtt`, `pki` ou `psk`) e `hops`.
+
+```bash
+curl -s http://127.0.0.1:8080/api/local/dash
+curl -s -X POST http://127.0.0.1:8080/api/local/send \
+     -H 'Content-Type: application/json' -d '{"text": "Olá", "channel": 0}'
+```
+
+- **Desligada:** as rotas respondem `404` como qualquer rota inexistente; nada
+  mais muda.
+- **Ligada:** só respondem a pedidos de `127.0.0.1` ou `::1` (`403` de
+  qualquer outro lado) e **não pedem login**: qualquer programa ou utilizador
+  desta máquina pode ler as mensagens e enviar pelo nó. Deixe-a desligada em
+  máquinas partilhadas com outros utilizadores.
+- Erros: `400` (texto vazio ou longo demais, canal ou destino inválido),
+  `503` (sem nó ligado).
+- Use a porta HTTP (`8080`, ou a indicada com `--port`); continua aberta com o HTTPS ligado.
+
+---
+
 ## 🌍 Acesso à Internet
 
 Tudo é servido pela própria máquina — interface, bibliotecas e gráficos das
@@ -384,7 +427,7 @@ browser.
 meshdeckweb/
 ├── install.py             ← Instalação guiada (venv, password, nó, HTTPS, mapa offline, atalho, ícone no menu)
 ├── run_server.py          ← Ponto de entrada e opções da linha de comandos
-├── server/                ← Flask + Socket.IO: API HTTP, login, HTTPS, ponte série
+├── server/                ← Flask + Socket.IO: API HTTP, API local, login, HTTPS, ponte série
 ├── core/                  ← Ligação ao nó, nós, mensagens, configuração, métricas
 ├── web/                   ← Interface do browser (HTML, CSS, JavaScript, Leaflet/Socket.IO incluídos)
 ├── i18n.py                ← Traduções PT/EN

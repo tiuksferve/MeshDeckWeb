@@ -42,6 +42,7 @@ def dash_payload(mesh) -> dict:
             msgs.append({
                 "key": key, "time": m["time"], "text": m["text"], "outgoing": m["outgoing"],
                 "direct": m["direct"], "status": m.get("status", ""),
+                "transport": m.get("transport", ""), "hops": m.get("hops"),
                 "from_id": m["from_id"], "from": names.get(m["from_id"], m["from_id"]),
                 "to_id": m.get("to_id", ""), "to": names.get(m.get("to_id", ""), m.get("to_id", "")),
                 "channel": channels.get(int(key.split(":", 1)[1]), key) if key.startswith("ch:") else "",
