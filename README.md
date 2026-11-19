@@ -76,8 +76,12 @@ well on a desktop browser.
 - **Device compass** on phones and tablets: the rose turns to true north and
   the needle points at the node, turning green when it is straight ahead
   (needs HTTPS — see below)
-- Local node card with GPS refresh, and every GPS node sorted by distance,
-  each with a 📍 button to open it on the map
+- Local node card that updates by itself whenever the node sends its
+  position, with source, satellites, HDOP and age; every GPS node sorted by
+  distance, each with a 📍 button to open it on the map
+- **uConsole GPS live** (read only): position, fix, satellites, DOP, speed
+  and a sky plot, also in the local API for DashOS. Nothing is sent to the
+  node or the mesh; see [Shared GPS](#-shared-gps)
 
 ### 📡 Traceroute
 
@@ -349,7 +353,8 @@ python3 run_server.py --local-api on      # --local-api off turns it off again
 
 | Route | Body | Answer |
 |---|---|---|
-| `GET /api/local/dash` | — | Local node and position, node counts, unread per conversation, channels, up to 100 nodes (without public keys) and the 30 latest messages |
+| `GET /api/local/dash` | — | Local node and position, uConsole GPS, node counts, unread per conversation, channels, up to 100 nodes (without public keys) and the 30 latest messages |
+| `GET /api/local/gps` | — | Only the uConsole GPS, live (light enough to read every second): `state`, `source`, `fix` (lat, lon, alt, fix type, satellites used/in view, HDOP/PDOP/VDOP, speed, heading, UTC time) and `sky` (system, PRN, elevation, azimuth, SNR, in use) |
 | `POST /api/local/send` | `{"text": "..", "channel": 0}` or `{"text": "..", "dest": "!abcd1234"}` | `{"ok": true, "key": "ch:0"}`. Text up to 200 bytes (UTF-8), channel 0–7 |
 | `POST /api/local/read` | `{"key": "ch:0"}` or `{"all": true}` | Marks the conversation as read, also in the browser |
 
@@ -371,6 +376,42 @@ curl -s -X POST http://127.0.0.1:8080/api/local/send \
 - Errors: `400` (empty or too long text, invalid channel or destination),
   `503` (no node connected).
 - Use the HTTP port (`8080`, or the one given with `--port`); it stays open when HTTPS is on.
+
+---
+
+## 🛰 Shared GPS
+
+The uConsole GPS (`/dev/ttyAMA0`) can only be read by one program, and
+normally that is `meshtasticd`. To also have it **live** in MeshDeckWeb and
+in the local API (DashOS, PyGPSClient…), install **gpsmux**
+(`gpsmux/gpsmux.py`), a small system service that starts before
+`meshtasticd`:
+
+- it owns `/dev/ttyAMA0` and gives `meshtasticd` a virtual serial port,
+  `/run/meshdeck-gps/meshtasticd`, in both directions: `meshtasticd` still
+  detects the GPS, sends it its commands and handles the node position and
+  broadcasts **exactly as configured**;
+- it publishes the NMEA at `tcp://127.0.0.1:10110` (read only), which
+  MeshDeckWeb reads;
+- the standby commands `meshtasticd` sends between readings do not reach the
+  GPS, so the data stays live (the GPS draws a little more power); every
+  command type that passes or is held back goes to the log.
+
+```bash
+sudo gpsmux/install.sh              # install and start
+journalctl -u meshdeck-gpsmux -f    # log
+sudo gpsmux/install.sh --uninstall  # remove; config.yaml goes back to the original
+```
+
+The installer writes `/etc/systemd/system/meshdeck-gpsmux.service` (runs as
+your user, `dialout` group), a `meshtasticd` drop-in (starts after gpsmux and
+restarts with it), changes only `GPS: SerialPath` in
+`/etc/meshtasticd/config.yaml` (a copy stays in
+`config.yaml.before-gpsmux`) and restarts both. MeshDeckWeb does not need to
+be running for `meshtasticd` to have its GPS.
+
+Without gpsmux, MeshDeckWeb reads the serial port directly only when nobody
+else (`meshtasticd`, `gpsd`) is using it; otherwise Navigation says so.
 
 ---
 
@@ -424,6 +465,7 @@ meshdeckweb/
 ├── i18n.py                ← PT/EN translations
 ├── constants.py           ← Version and colours
 ├── meshtastic_bridge.py   ← USB-to-TCP serial bridge
+├── gpsmux/                ← Shared GPS: service that splits the GPS between meshtasticd and other apps
 ├── docs/screenshots/      ← README images (en/pt)
 ├── tests/                 ← pytest suite
 ├── requirements.txt

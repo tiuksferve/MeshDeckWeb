@@ -9,12 +9,15 @@ respondem 404 como qualquer rota inexistente e o MeshDeck funciona exactamente c
 Ligada, só responde a pedidos de 127.0.0.1/::1 (não há proxy à frente, o remote_addr é o real) e
 não pede login: quem já corre na máquina tem acesso ao nó de qualquer forma.
 
-    GET  /api/local/dash   resumo: nó local, posição, contagens, não lidas, nós, últimas mensagens
+    GET  /api/local/dash   resumo: nó local, posição, GPS, contagens, não lidas, nós, mensagens
+    GET  /api/local/gps    só o GPS do uConsole ao vivo (fonte, fix, DOP, céu) — leve, para ler a 1 Hz
     POST /api/local/send   {"text": "..", "channel": 0} ou {"text": "..", "dest": "!abcd1234"}
     POST /api/local/read   {"key": "ch:0"} ou {"all": true}
 """
 
 from __future__ import annotations
+
+import time
 
 from flask import jsonify, request
 
@@ -26,6 +29,14 @@ MESSAGES_LIMIT = 30
 NODE_FIELDS = ("id_string", "short_name", "long_name", "last_heard", "snr", "hops_away", "via_mqtt",
                "latitude", "longitude", "altitude", "battery_level", "voltage", "hw_model",
                "channel_utilization", "air_util_tx", "is_local")
+
+
+def gps_payload(mesh) -> dict:
+    """GPS do uConsole ao vivo (core/gps_feed.py): o último estado publicado, no
+    máximo com 1 s. Lê-se a cópia, porque o loop está sempre a mudar o estado."""
+    status = dict(mesh.gps_status)
+    status["time"] = time.time()
+    return status
 
 
 def dash_payload(mesh) -> dict:
@@ -55,6 +66,7 @@ def dash_payload(mesh) -> dict:
         "node_ready": bool(mesh.node_ready),
         "local_node": dict(mesh.local_node),
         "local_position": dict(mesh.local_position),
+        "gps": gps_payload(mesh),
         "local": {k: local.get(k) for k in NODE_FIELDS} if local else {},
         "counts": {"total": mesh.nodes.count(), "online": mesh.nodes.online_count(),
                    "contacted": mesh.nodes.contacted_count()},
@@ -77,6 +89,10 @@ def register_local_api(app, mesh, is_local_request, enabled=lambda: False) -> No
     @app.get("/api/local/dash")
     def api_local_dash():
         return local_only() or jsonify(dash_payload(mesh))
+
+    @app.get("/api/local/gps")
+    def api_local_gps():
+        return local_only() or jsonify(gps_payload(mesh))
 
     @app.post("/api/local/send")
     def api_local_send():

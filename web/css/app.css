@@ -347,6 +347,12 @@ tbody tr:hover td { background: var(--input); }
 .field-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; }
 .field-list dt { color: var(--muted); }
 .field-list dd { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+.gps-feed { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
+.gps-feed h3 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.gps-feed-status { margin: 0; font-size: 12px; }
+.gps-feed-status[data-state="fix"] { color: var(--green); }
+.gps-feed-status[data-state="no_device"] { color: var(--orange); }
+.gps-sky { width: 100%; max-width: 220px; justify-self: center; }
 
 /* ── métricas ───────────────────────────────────────────────────────────── */
 .metrics-layout { display: grid; grid-template-columns: 200px 1fr; gap: 12px; height: calc(100vh - 230px); min-height: 420px; }

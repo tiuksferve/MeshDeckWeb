@@ -67,7 +67,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   404 and nothing changes; on, they answer only `127.0.0.1`/`::1` and need
   no login. README section "Local API".
 
+- **Shared GPS (gpsmux) and the uConsole GPS live.** `gpsmux/gpsmux.py`, a
+  small system service (`sudo gpsmux/install.sh`), owns `/dev/ttyAMA0` and
+  gives `meshtasticd` a virtual serial port in both directions, so
+  `meshtasticd` keeps handling the GPS, the node position and broadcasts as
+  configured; it publishes the NMEA at `tcp://127.0.0.1:10110` and keeps
+  `meshtasticd`'s standby commands from putting the GPS to sleep, so the
+  data stays live. MeshDeckWeb reads it (or the serial port directly when
+  nobody else has it) and shows position, fix, satellites, DOP, speed and a
+  sky plot in Navigation, and in the local API: `gps` in
+  `/api/local/dash` and a light `GET /api/local/gps` for DashOS. Read only:
+  nothing is sent to the node or the mesh.
+
 ### Changed
+
+- **The local node position updates by itself.** Every position the node
+  sends now refreshes Navigation, the map and distances, without the 🔄
+  button, with source (node GPS, uConsole GPS, fixed), satellites, HDOP, fix
+  and age. A broadcast with the channel's reduced precision only fills in
+  when there is no position yet.
 
 - **Tab order:** Nodes, Messages, Map, Navigation, Metrics, Configuration
   (Messages moved before Map).

@@ -32,6 +32,7 @@ export function connectSocket(onToast) {
   socket.on('nodedb_reset', (payload) => store.applyNodedbReset(payload));
   socket.on('local_node', (payload) => store.applyLocalNode(payload));
   socket.on('local_position', (payload) => store.applyLocalPosition(payload));
+  socket.on('gps_status', (payload) => store.applyGps(payload));
   socket.on('my_node_id', () => {});   // já reflectido em local_node_ready
   socket.on('channels', (payload) => store.applyChannels(payload));
   socket.on('snr_levels', (payload) => store.applySnrLevels(payload));

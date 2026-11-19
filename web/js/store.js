@@ -17,7 +17,8 @@ class Store extends EventTarget {
     this.counts = { total: 0, contacted: 0, online: 0 };
     this.channels = [];              // [{index, name, has_psk}]
     this.localNode = {};             // {long_name, short_name, node_id, gps_enabled, has_position}
-    this.localPosition = {};         // {lat, lon, alt, found}
+    this.localPosition = {};         // {lat, lon, alt, found, source, sats_in_view, hdop…, updated}
+    this.gps = {};                   // GPS do uConsole (core/gps_feed.py)
     this.connection = { connected: false, target: {}, bridge: {}, node_ready: false };
     this.reconnect = { attempt: 0, delay_s: 0 };
     this.packetStats = { snr: null, packets_per_min: 0 };
@@ -51,6 +52,7 @@ class Store extends EventTarget {
     this.channels = snapshot.channels || [];
     this.localNode = snapshot.local_node || {};
     this.localPosition = snapshot.local_position || {};
+    this.gps = snapshot.gps || {};
     this.connection = snapshot.connection || this.connection;
     this.reconnect = snapshot.reconnect || this.reconnect;
     this.mqttStatus = snapshot.mqtt_status || {};
@@ -125,6 +127,12 @@ class Store extends EventTarget {
   applyLocalNode(payload) {
     this.localNode = payload;
     this.emit('local-node-changed');
+  }
+
+  /* GPS do uConsole: { enabled, interval_s, state, owner, path, fix, last_sent, note }. */
+  applyGps(payload) {
+    this.gps = payload || {};
+    this.emit('gps-changed');
   }
 
   applyLocalPosition(payload) {

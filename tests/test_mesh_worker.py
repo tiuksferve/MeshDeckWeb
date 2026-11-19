@@ -629,7 +629,7 @@ def test_refresh_local_position_from_daemon_cache(wired):
     worker, iface, rec = wired
     worker._connected = True
     worker.refresh_local_position()
-    lat, lon, alt, found = rec.wait("local_position_updated")[0]
+    lat, lon, alt, found, _extras = rec.wait("local_position_updated")[0]
     assert found is True
     assert lat == pytest.approx(38.5) and lon == pytest.approx(-9.1)
     assert alt == 95
@@ -643,7 +643,7 @@ def test_refresh_local_position_falls_back_to_fixed_config(wired):
     iface.localNode.localConfig.position.fixed_lon = -8.5
     iface.localNode.localConfig.position.fixed_alt = 200
     worker.refresh_local_position()
-    lat, lon, alt, found = rec.wait("local_position_updated")[0]
+    lat, lon, alt, found, _extras = rec.wait("local_position_updated")[0]
     assert found is True
     assert lat == pytest.approx(40.25) and lon == pytest.approx(-8.5) and alt == 200
 
@@ -655,7 +655,7 @@ def test_refresh_local_position_reports_not_found(wired):
     iface.localNode.localConfig.position.fixed_lat = 0.0
     iface.localNode.localConfig.position.fixed_lon = 0.0
     worker.refresh_local_position()
-    _lat, _lon, _alt, found = rec.wait("local_position_updated")[0]
+    _lat, _lon, _alt, found, _extras = rec.wait("local_position_updated")[0]
     assert found is False
 
 
@@ -697,7 +697,6 @@ def test_node_updated_topic_skips_the_local_node(wired):
     """O nó local é gerido por local_node_ready, não pela tabela."""
     worker, iface, rec = wired
     worker._local_id_known = LOCAL_ID
-    worker._local_num_known = LOCAL_NUM
     emit_node_updated(iface.nodesByNum[LOCAL_NUM], iface)
     emit_node_updated(iface.nodesByNum[PEER_NUM], iface)
     rec.wait("node_updated")
@@ -778,3 +777,30 @@ def test_receive_user_topic_also_sanitises_the_name(wired):
     _nid, updates, _ = rec.wait("node_updated")[0]
     assert updates["long_name"].encode("utf-8")
     assert updates["short_name"].encode("utf-8")
+
+
+# ── posição do próprio nó ──────────────────────────────────────────────
+
+def test_local_node_position_packet_updates_local_position(wired):
+    """A posição que o próprio nó transmite actualiza a do nó local, com satélites."""
+    worker, iface, rec = wired
+    worker._connected = True
+    emit_packet(packet("POSITION_APP", LOCAL_NUM, decoded={"position": {
+        "latitudeI": 386937530, "longitudeI": -92975673, "altitude": 90,
+        "satsInView": 9, "HDOP": 120, "fixType": 3, "time": 1795091719,
+    }}), iface)
+    lat, lon, alt, found, extras = rec.wait("local_position_updated")[0]
+    assert (lat, lon, alt, found) == (38.693753, -9.2975673, 90, True)
+    assert extras == {"source": "node", "sats_in_view": 9, "hdop": 1.2, "fix_type": 3,
+                      "time": 1795091719}
+
+
+def test_reduced_precision_broadcast_does_not_replace_a_good_position(wired):
+    worker, iface, rec = wired
+    worker._connected = True
+    worker._local_position_found = True
+    emit_packet(packet("POSITION_APP", LOCAL_NUM, decoded={"position": {
+        "latitudeI": 386936832, "longitudeI": -92975104, "precisionBits": 19,
+    }}), iface)
+    rec.quiesce(worker.loop)
+    assert rec["local_position_updated"] == []

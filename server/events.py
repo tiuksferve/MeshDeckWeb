@@ -39,6 +39,7 @@ MESSAGE_SENT    = "message_sent"      # eco de uma mensagem enviada
 MESSAGE_STATUS  = "message_status"    # ACK/NAK por packet id
 TRACEROUTE      = "traceroute"        # resultado de um traceroute
 TRACEROUTE_REQUEST = "traceroute_request"  # outro nó fez traceroute ao nó local
+GPS_STATUS      = "gps_status"        # GPS do uConsole ao vivo: fonte, fix, céu
 NEIGHBORS       = "neighbors"         # vizinhança NeighborInfo
 POSITION_SENT   = "position_sent"     # resultado do envio de posição
 PACKET          = "packet"            # projecção compacta de um pacote
@@ -98,8 +99,12 @@ def local_node_ready(long_name, short_name, node_id, gps_enabled, has_position) 
     }
 
 
-def local_position_updated(lat, lon, alt, found) -> dict:
-    return {"lat": lat, "lon": lon, "alt": alt, "found": bool(found)}
+def local_position_updated(lat, lon, alt, found, extras=None) -> dict:
+    """Posição do nó local. extras: source ("node", "gps", "fixed"), satélites, DOP…"""
+    out = {"lat": lat, "lon": lon, "alt": alt, "found": bool(found)}
+    if found:
+        out.update(extras or {})
+    return out
 
 
 def channels_updated(channels: list) -> dict:
