@@ -58,7 +58,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **🧩 Local API for programs on this machine** (`--local-api on|off`, off
   by default and saved). `meshtasticd` takes a single client and
-  MeshDeckWeb is it, so a companion program such as the DashOS ESP32 display
+  MeshDeckWeb is it, so a companion program such as the DashDeck ESP32 display
   on the uConsole reads the node through MeshDeckWeb instead of opening a
   second connection: `GET /api/local/dash` (local node, counts, unread,
   channels, nodes without public keys, latest messages with their transport,
@@ -76,10 +76,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data stays live. MeshDeckWeb reads it (or the serial port directly when
   nobody else has it) and shows position, fix, satellites, DOP, speed and a
   sky plot in Navigation, and in the local API: `gps` in
-  `/api/local/dash` and a light `GET /api/local/gps` for DashOS. Read only:
+  `/api/local/dash` and a light `GET /api/local/gps` for DashDeck. Read only:
   nothing is sent to the node or the mesh.
 
 ### Changed
+
+- **The uConsole ESP32 display is now called DashDeck** (it was DashOS, a
+  name already used by other products). Only the docs, the `--local-api`
+  help text and code comments change; the local API itself is the same.
 
 - **The local node position updates by itself.** Every position the node
   sends now refreshes Navigation, the map and distances, without the 🔄

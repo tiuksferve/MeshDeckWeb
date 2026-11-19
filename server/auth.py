@@ -120,7 +120,7 @@ class ServerConfig:
 
     @property
     def local_api(self) -> bool:
-        """API /api/local/* para programas da própria máquina (ex.: DashOS). Desligada por omissão."""
+        """API /api/local/* para programas da própria máquina (ex.: DashDeck). Desligada por omissão."""
         return bool(self._s.value("local_api", False, type=bool))
 
     def set_local_api(self, enabled: bool):

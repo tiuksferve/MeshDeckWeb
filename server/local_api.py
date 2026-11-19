@@ -1,5 +1,5 @@
 """
-API local para outros programas da própria máquina (ex.: o DashOS, a tela ESP32 do uConsole).
+API local para outros programas da própria máquina (ex.: o DashDeck, a tela ESP32 do uConsole).
 
 A API TCP do meshtasticd só aceita um cliente; o MeshDeck já é esse cliente, por isso quem
 corre ao lado pede-lhe os dados aqui em vez de abrir outra ligação ao nó.

@@ -1,7 +1,7 @@
 """
 core/gps_feed.py — GPS do uConsole ao vivo, só para leitura.
 
-A MeshDeckWeb lê o NMEA e põe-no na interface e na API local (DashOS e
+A MeshDeckWeb lê o NMEA e põe-no na interface e na API local (DashDeck e
 outras apps): posição, fix, DOP e o céu dos satélites. Não envia nada ao nó
 nem à rede: a posição do nó e as transmissões continuam a ser as do
 meshtasticd, como estiver configurado.

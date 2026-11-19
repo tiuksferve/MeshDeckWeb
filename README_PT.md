@@ -81,7 +81,7 @@ igualmente bem num browser de computador.
   posição, com a fonte, satélites, HDOP e há quanto tempo; todos os nós com
   GPS ordenados por distância, cada um com um botão 📍 para o abrir no mapa
 - **GPS do uConsole ao vivo** (só leitura): posição, fix, satélites, DOP,
-  velocidade e o céu dos satélites, também na API local para o DashOS. Nada
+  velocidade e o céu dos satélites, também na API local para o DashDeck. Nada
   é enviado ao nó nem à rede; ver [GPS partilhado](#-gps-partilhado)
 
 ### 📡 Traceroute
@@ -272,7 +272,7 @@ escolhidos ficam guardados para as execuções seguintes.
 | `--tls-cert`, `--tls-key` | Usar um certificado próprio |
 | `--no-tls` | Desligar o HTTPS (só HTTP) e sair |
 | `--tile-cache-mb` | Espaço para o mapa offline (por omissão `200`, `0` = não guardar) |
-| `--local-api on\|off` | API local `/api/local/*` para programas da própria máquina, ex.: o ecrã ESP32 DashOS (por omissão `off`, fica guardado) |
+| `--local-api on\|off` | API local `/api/local/*` para programas da própria máquina, ex.: o ecrã ESP32 DashDeck (por omissão `off`, fica guardado) |
 | `--debug` | Registo detalhado (por exemplo, cada LocalStats recebido) |
 
 > ⚠️ Quem entrar pode reconfigurar o nó, incluindo canais e PSK. Abra o
@@ -347,7 +347,7 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 Programas da própria máquina podem ler o nó e enviar mensagens através do
 MeshDeckWeb. O `meshtasticd` só aceita um cliente e esse cliente é o
 MeshDeckWeb, por isso um programa auxiliar (como o ecrã ESP32
-DashOS do uConsole) pede os dados ao
+DashDeck do uConsole) pede os dados ao
 MeshDeckWeb em vez de abrir uma segunda ligação, que derrubaria a do
 MeshDeckWeb.
 
@@ -390,7 +390,7 @@ curl -s -X POST http://127.0.0.1:8080/api/local/send \
 
 O GPS do uConsole (`/dev/ttyAMA0`) só pode ser lido por um programa, e
 normalmente é o `meshtasticd`. Para o ter também **ao vivo** na MeshDeckWeb e
-na API local (DashOS, PyGPSClient…), instala o **gpsmux**
+na API local (DashDeck, PyGPSClient…), instala o **gpsmux**
 (`gpsmux/gpsmux.py`), um pequeno serviço do sistema que arranca antes do
 `meshtasticd`:
 
