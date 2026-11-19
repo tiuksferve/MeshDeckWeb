@@ -80,7 +80,7 @@ well on a desktop browser.
   position, with source, satellites, HDOP and age; every GPS node sorted by
   distance, each with a 📍 button to open it on the map
 - **uConsole GPS live** (read only): position, fix, satellites, DOP, speed
-  and a sky plot, also in the local API for DashOS. Nothing is sent to the
+  and a sky plot, also in the local API for DashDeck. Nothing is sent to the
   node or the mesh; see [Shared GPS](#-shared-gps)
 
 ### 📡 Traceroute
@@ -269,7 +269,7 @@ are remembered for the next runs.
 | `--tls-cert`, `--tls-key` | Use your own certificate instead |
 | `--no-tls` | Turn HTTPS off (HTTP only) and exit |
 | `--tile-cache-mb` | Space for the offline map (default `200`, `0` = keep nothing) |
-| `--local-api on\|off` | Local `/api/local/*` API for programs on this machine, e.g. the DashOS ESP32 display (default `off`, saved) |
+| `--local-api on\|off` | Local `/api/local/*` API for programs on this machine, e.g. the DashDeck ESP32 display (default `off`, saved) |
 | `--debug` | Detailed logging (e.g. each LocalStats received) |
 
 > ⚠️ Anyone who logs in can reconfigure the node, channels and PSKs included.
@@ -341,7 +341,7 @@ python3 meshtastic_bridge.py --port /dev/ttyACM0 --verbose
 Programs on the same machine can read the node and send messages through
 MeshDeckWeb. `meshtasticd` accepts a single client and MeshDeckWeb is that
 client, so a companion program (such as the
-DashOS ESP32 display on the uConsole) asks
+DashDeck ESP32 display on the uConsole) asks
 MeshDeckWeb instead of opening a second connection, which would drop
 MeshDeckWeb's.
 
@@ -383,7 +383,7 @@ curl -s -X POST http://127.0.0.1:8080/api/local/send \
 
 The uConsole GPS (`/dev/ttyAMA0`) can only be read by one program, and
 normally that is `meshtasticd`. To also have it **live** in MeshDeckWeb and
-in the local API (DashOS, PyGPSClient…), install **gpsmux**
+in the local API (DashDeck, PyGPSClient…), install **gpsmux**
 (`gpsmux/gpsmux.py`), a small system service that starts before
 `meshtasticd`:
 

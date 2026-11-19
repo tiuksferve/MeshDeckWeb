@@ -550,7 +550,7 @@ def create_app(config: ServerConfig = None) -> tuple:
             socketio.emit(ev.SNAPSHOT, mesh.snapshot(), to=request.sid)
         return mesh.metric_sections(lang)
 
-    # API só para a própria máquina (DashOS e afins), opcional: ver server/local_api.py
+    # API só para a própria máquina (DashDeck e afins), opcional: ver server/local_api.py
     register_local_api(app, mesh, is_local_request, lambda: config.local_api)
 
     return app, socketio, mesh

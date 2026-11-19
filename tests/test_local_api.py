@@ -116,7 +116,7 @@ def test_send_without_connection_is_503(server):  # noqa: F811
 
 
 def test_gps_live_in_local_api(server):  # noqa: F811
-    """GPS do uConsole ao vivo para o DashOS: no resumo e num endpoint leve."""
+    """GPS do uConsole ao vivo para o DashDeck: no resumo e num endpoint leve."""
     mesh = server["mesh"]
     status = {"state": "fix", "source": "gpsmux", "owner": "", "path": "tcp://127.0.0.1:10110",
               "error": "", "fix": {"fix": True, "lat": 38.69375, "lon": -9.297567, "alt": 95.4,
