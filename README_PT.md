@@ -77,8 +77,12 @@ igualmente bem num browser de computador.
 - **Bússola do dispositivo** em telemóveis e tablets: a rosa roda para o norte
   real e a agulha aponta para o nó, ficando verde quando está em frente
   (requer HTTPS — ver abaixo)
-- Cartão do nó local com actualização do GPS, e todos os nós com GPS ordenados
-  por distância, cada um com um botão 📍 para o abrir no mapa
+- Cartão do nó local que se actualiza sozinho sempre que o nó envia a
+  posição, com a fonte, satélites, HDOP e há quanto tempo; todos os nós com
+  GPS ordenados por distância, cada um com um botão 📍 para o abrir no mapa
+- **GPS do uConsole ao vivo** (só leitura): posição, fix, satélites, DOP,
+  velocidade e o céu dos satélites, também na API local para o DashOS. Nada
+  é enviado ao nó nem à rede; ver [GPS partilhado](#-gps-partilhado)
 
 ### 📡 Traceroute
 
@@ -355,7 +359,8 @@ python3 run_server.py --local-api on      # --local-api off volta a desligá-la
 
 | Rota | Corpo | Resposta |
 |---|---|---|
-| `GET /api/local/dash` | — | Nó local e posição, contagem de nós, não lidas por conversa, canais, até 100 nós (sem chaves públicas) e as 30 mensagens mais recentes |
+| `GET /api/local/dash` | — | Nó local e posição, GPS do uConsole, contagem de nós, não lidas por conversa, canais, até 100 nós (sem chaves públicas) e as 30 mensagens mais recentes |
+| `GET /api/local/gps` | — | Só o GPS do uConsole, ao vivo (leve, para ler a cada segundo): `state`, `source`, `fix` (lat, lon, alt, tipo de fix, satélites usados/à vista, HDOP/PDOP/VDOP, velocidade, rumo, hora UTC) e `sky` (sistema, PRN, elevação, azimute, SNR, em uso) |
 | `POST /api/local/send` | `{"text": "..", "channel": 0}` ou `{"text": "..", "dest": "!abcd1234"}` | `{"ok": true, "key": "ch:0"}`. Texto até 200 bytes (UTF-8), canal 0–7 |
 | `POST /api/local/read` | `{"key": "ch:0"}` ou `{"all": true}` | Marca a conversa como lida, também no browser |
 
@@ -378,6 +383,41 @@ curl -s -X POST http://127.0.0.1:8080/api/local/send \
 - Erros: `400` (texto vazio ou longo demais, canal ou destino inválido),
   `503` (sem nó ligado).
 - Use a porta HTTP (`8080`, ou a indicada com `--port`); continua aberta com o HTTPS ligado.
+
+---
+
+## 🛰 GPS partilhado
+
+O GPS do uConsole (`/dev/ttyAMA0`) só pode ser lido por um programa, e
+normalmente é o `meshtasticd`. Para o ter também **ao vivo** na MeshDeckWeb e
+na API local (DashOS, PyGPSClient…), instala o **gpsmux**
+(`gpsmux/gpsmux.py`), um pequeno serviço do sistema que arranca antes do
+`meshtasticd`:
+
+- fica com o `/dev/ttyAMA0` e dá ao `meshtasticd` uma porta série virtual,
+  `/run/meshdeck-gps/meshtasticd`, nos dois sentidos: o `meshtasticd`
+  continua a detectar o GPS, a mandar-lhe comandos e a gerir a posição do nó
+  e as transmissões **tal como estiver configurado**;
+- publica o NMEA em `tcp://127.0.0.1:10110` (só leitura), que a MeshDeckWeb lê;
+- os comandos de standby que o `meshtasticd` envia entre leituras não chegam
+  ao GPS, para os dados continuarem ao vivo (o GPS gasta um pouco mais);
+  cada tipo de comando que passa ou fica retido vai para o registo.
+
+```bash
+sudo gpsmux/install.sh              # instala e liga
+journalctl -u meshdeck-gpsmux -f    # registo
+sudo gpsmux/install.sh --uninstall  # remove; o config.yaml volta ao original
+```
+
+O instalador escreve `/etc/systemd/system/meshdeck-gpsmux.service` (corre
+como o teu utilizador, grupo `dialout`), um drop-in do `meshtasticd` (arranca
+depois do gpsmux e reinicia com ele), muda só o `GPS: SerialPath` do
+`/etc/meshtasticd/config.yaml` (fica uma cópia em `config.yaml.before-gpsmux`)
+e reinicia os dois. O `meshtasticd` tem GPS mesmo sem a MeshDeckWeb a correr.
+
+Sem o gpsmux, a MeshDeckWeb só lê a porta série directamente quando mais
+ninguém (`meshtasticd`, `gpsd`) a estiver a usar; caso contrário, a
+Navegação diz isso.
 
 ---
 
@@ -433,6 +473,7 @@ meshdeckweb/
 ├── i18n.py                ← Traduções PT/EN
 ├── constants.py           ← Versão e cores
 ├── meshtastic_bridge.py   ← Ponte série USB → TCP
+├── gpsmux/                ← GPS partilhado: serviço que divide o GPS entre o meshtasticd e outras apps
 ├── docs/screenshots/      ← Imagens dos READMEs (en/pt)
 ├── tests/                 ← Testes (pytest)
 ├── requirements.txt

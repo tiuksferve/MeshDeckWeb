@@ -229,6 +229,13 @@
         <div class="panel">
           <h2><span data-i18n="Nó local">Nó local</span> <button id="btn-refresh-pos" class="ghost small" data-i18n="🔄 actualizar posição">🔄 actualizar posição</button></h2>
           <dl id="local-card" class="field-list"></dl>
+          <div class="gps-feed">
+            <h3 data-i18n="GPS do uConsole">GPS do uConsole</h3>
+            <p id="gps-feed-status" class="gps-feed-status muted"></p>
+            <dl id="gps-feed-card" class="field-list" hidden></dl>
+            <svg id="gps-sky" class="gps-sky" viewBox="0 0 200 200" hidden
+                 role="img" aria-label="Céu dos satélites" data-i18n-title="Céu dos satélites"></svg>
+          </div>
         </div>
         <div class="panel full">
           <h2><span data-i18n="Nós com GPS, por distância">Nós com GPS, por distância</span> <span id="gps-count" class="count-badge"></span></h2>

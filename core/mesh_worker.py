@@ -123,7 +123,7 @@ class MeshtasticWorker:
         self.nodedb_reset           = Signal("nodedb_reset")            # ()
         self.neighbor_info_received = Signal("neighbor_info_received")  # (from_id: str, [(neighbor_id, snr), ...])
         self.position_sent          = Signal("position_sent")           # (success: bool, message_for_ui: str)
-        self.local_position_updated = Signal("local_position_updated")  # (lat: float, lon: float, alt: int | None, found: bool)
+        self.local_position_updated = Signal("local_position_updated")  # (lat, lon, alt | None, found, extras: dict) — extras: source, satélites, DOP…
         self.raw_packet_received    = Signal("raw_packet_received")     # (packet: dict)
         self.reconnect_status       = Signal("reconnect_status")        # (attempt: int, delay_s: int)   # attempt=0 -> reconectado
 
@@ -138,6 +138,8 @@ class MeshtasticWorker:
         # ID do nó local — usado por _emit_node para evitar inserção na tabela
         self._local_id_known:  Optional[str] = None
         self._local_num_known: Optional[int] = None
+        self._local_position_found = False
+        self.local_position_updated.connect(self._track_local_position)
 
     # ------------------------------------------------------------------
     # Entrega de sinais
@@ -502,6 +504,36 @@ class MeshtasticWorker:
             logger.error(f"Error sending position: {e}", exc_info=True)
             self._emit(self.position_sent, False, tr("Erro ao enviar posição: {msg}", msg=str(e)))
 
+    def _track_local_position(self, _lat, _lon, _alt, found, _extras=None):
+        self._local_position_found = bool(found)
+
+    def _on_local_position_packet(self, pos: dict):
+        """Posição que o próprio nó transmitiu: actualiza a do nó local ao vivo.
+
+        A transmissão vai com a precisão do canal (precisionBits); uma posição
+        reduzida só se usa se ainda não houver nenhuma.
+        """
+        lat_i, lon_i = pos.get('latitudeI'), pos.get('longitudeI')
+        if not lat_i or not lon_i:
+            return
+        bits = pos.get('precisionBits')
+        full = bits in (None, 0, 32)
+        if not full and self._local_position_found:
+            return
+        extras = {
+            "source": "node",
+            "sats_in_view": pos.get('satsInView'),
+            "hdop": pos['HDOP'] / 100 if pos.get('HDOP') else None,
+            "pdop": pos['PDOP'] / 100 if pos.get('PDOP') else None,
+            "fix_type": pos.get('fixType'),
+            "fix_quality": pos.get('fixQuality'),
+            "speed_mps": pos.get('groundSpeed'),
+            "time": pos.get('time') or pos.get('timestamp'),
+            "precision_bits": bits if not full else None,
+        }
+        self._emit(self.local_position_updated, lat_i / 1e7, lon_i / 1e7,
+                   pos.get('altitude'), True, {k: v for k, v in extras.items() if v is not None})
+
     @on_loop
     def refresh_local_position(self):
         """
@@ -517,13 +549,14 @@ class MeshtasticWorker:
         possa mostrar feedback adequado (ex: "⚠ Sem posição GPS").
         """
         if not self.iface or not self._connected:
-            self._emit(self.local_position_updated, 0.0, 0.0, None, False)
+            self._emit(self.local_position_updated, 0.0, 0.0, None, False, {})
             return
         try:
             local_node = self.iface.localNode
             local_num  = local_node.nodeNum if local_node else None
 
             lat_i = lon_i = alt = None
+            extras = {"source": "node"}
 
             # 1. Cache do daemon
             if local_num and hasattr(self.iface, 'nodesByNum'):
@@ -531,6 +564,11 @@ class MeshtasticWorker:
                 lat_i = pos.get('latitudeI')
                 lon_i = pos.get('longitudeI')
                 alt   = pos.get('altitude')
+                for key, src, scale in (("sats_in_view", 'satsInView', 1), ("hdop", 'HDOP', 100),
+                                        ("pdop", 'PDOP', 100), ("fix_type", 'fixType', 1),
+                                        ("time", 'time', 1)):
+                    if pos.get(src):
+                        extras[key] = pos[src] / scale if scale != 1 else pos[src]
 
             # 2. Posição fixa na config do localNode
             if not lat_i or not lon_i:
@@ -547,6 +585,7 @@ class MeshtasticWorker:
                             lon_i = int(fixed_lon * 1e7) if isinstance(fixed_lon, float) else int(fixed_lon)
                             if fixed_alt:
                                 alt = int(fixed_alt)
+                            extras = {"source": "fixed"}
                             logger.debug(f"refresh_local_position: using fixed pos ({lat_i/1e7:.6f}, {lon_i/1e7:.6f})")
                 except Exception as cfg_err:
                     logger.debug(f"refresh_local_position: fixed pos read failed: {cfg_err}")
@@ -555,14 +594,14 @@ class MeshtasticWorker:
                 lat = lat_i / 1e7
                 lon = lon_i / 1e7
                 logger.debug(f"refresh_local_position: found ({lat:.6f}, {lon:.6f})")
-                self._emit(self.local_position_updated, lat, lon, alt, True)
+                self._emit(self.local_position_updated, lat, lon, alt, True, extras)
             else:
                 logger.debug("refresh_local_position: no position available")
-                self._emit(self.local_position_updated, 0.0, 0.0, None, False)
+                self._emit(self.local_position_updated, 0.0, 0.0, None, False, {})
 
         except Exception as e:
             logger.error(f"refresh_local_position error: {e}", exc_info=True)
-            self._emit(self.local_position_updated, 0.0, 0.0, None, False)
+            self._emit(self.local_position_updated, 0.0, 0.0, None, False, {})
 
     @on_loop
     def send_node_info(self):
@@ -1095,6 +1134,10 @@ class MeshtasticWorker:
                         except (TypeError, ValueError):
                             pass
                     if is_local:
+                        if portnum == 'POSITION_APP':
+                            # A posição que o próprio nó transmite: actualiza a
+                            # dele ao vivo (o resto do eco não interessa).
+                            self._on_local_position_packet(decoded.get('position', {}))
                         logger.debug(f'Loopback ignored: portnum={portnum} from={from_id_string}')
                         return
 

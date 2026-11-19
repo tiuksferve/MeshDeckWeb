@@ -20,6 +20,7 @@ from collections import deque
 from typing import Optional
 
 from core import automations as auto
+from core import gps_feed
 from core.favorites import FirmwareFavorites
 from core.loop import CoreLoop
 from core.mesh_worker import MeshtasticWorker
@@ -188,6 +189,19 @@ class MeshSession:
         if config.metrics_node:
             self.loop.post(self._open_history, config.metrics_node)
 
+        # GPS do uConsole ao vivo, só leitura (core/gps_feed.py): para a
+        # interface e a API local. Nada daqui vai para o nó. As funções vão
+        # por nome para os testes as trocarem.
+        self.gps_status: dict = {}
+        self.gps = gps_feed.GpsFeed(
+            self.loop, self._on_gps_status,
+            owner_fn=lambda: gps_feed.gps_owner(),
+            path_fn=lambda: gps_feed.detect_serial_path(),
+            mux_fn=lambda: gps_feed.mux_available(),
+            tcp_factory=lambda *args: gps_feed.TcpNmeaReader(gps_feed.MUX_ADDRESS, *args),
+            serial_factory=lambda *args: gps_feed.SerialNmeaReader(*args))
+        self.gps.start()
+
     # ------------------------------------------------------------------
     # Ciclo de vida da ligação
     # ------------------------------------------------------------------
@@ -234,6 +248,7 @@ class MeshSession:
     def shutdown(self):
         """Paragem ordenada: ponte, worker, loop, histórico e handler de log."""
         self.disconnect()
+        self.gps.stop()
         self._stats_timer.stop()
         self._history_timer.stop()
         self.loop.stop()
@@ -405,8 +420,10 @@ class MeshSession:
             self._config.record_target(self.target["host"], self.target["port"],
                                        name=f"{long_name} [{short_name}]" if short_name else long_name)
 
-    def _on_local_position(self, lat, lon, alt, found):
-        self.local_position = ev.local_position_updated(lat, lon, alt, found)
+    def _on_local_position(self, lat, lon, alt, found, extras=None):
+        self.local_position = ev.local_position_updated(lat, lon, alt, found, extras)
+        if found:
+            self.local_position["updated"] = time.time()
         # O alcance directo mede a partir daqui (Métricas → Alcance & Links).
         if found and self.metrics._local_nid:
             self.metrics.ingest_node_position(self.metrics._local_nid, lat, lon)
@@ -654,6 +671,11 @@ class MeshSession:
         if self._mqtt_broker is None:
             self._set_mqtt_status({"enabled": False})
 
+    # -- GPS do uConsole ----------------------------------------------------
+    def _on_gps_status(self, status: dict):
+        self.gps_status = status
+        self._broadcast(ev.GPS_STATUS, status)
+
     def _check_mqtt(self):
         """Corre na thread do loop; o teste em si vai para uma thread, porque
         pode demorar até PROBE_TIMEOUT_S."""
@@ -692,6 +714,7 @@ class MeshSession:
             "counts":         self._counts(),
             "local_node":     dict(self.local_node),
             "local_position": dict(self.local_position),
+            "gps":            dict(self.gps_status),
             "channels":       list(self.channels),
             "messages":       self.messages.snapshot(),
             "favorites":      sorted(self.favorites.get_all()),

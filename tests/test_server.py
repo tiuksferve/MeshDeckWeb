@@ -1015,3 +1015,39 @@ def test_automation_preview_endpoint(server):
     data = response.get_json()
     assert response.status_code == 200 and data["text"].endswith("!")
     assert data["bytes"] == len(data["text"].encode())
+
+
+# ── GPS do uConsole ──────────────────────────────────────────────────────────
+
+def wait_gps(broadcasts, predicate, timeout=3.0):
+    import time
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        hits = [p for name, p in broadcasts if name == "gps_status" and predicate(p)]
+        if hits:
+            return hits[-1]
+        time.sleep(0.005)
+    raise AssertionError("gps_status esperado não chegou: "
+                         f"{[p for name, p in broadcasts if name == 'gps_status'][-3:]}")
+
+
+def test_gps_status_is_broadcast_and_in_snapshot(server):
+    # Nos testes não há gpsmux e a porta nunca abre: fica "sem GPS".
+    import time
+    mesh = server["mesh"]
+    end = time.monotonic() + 3
+    while mesh.snapshot()["gps"].get("state") != "no_device" and time.monotonic() < end:
+        time.sleep(0.02)
+    status = mesh.snapshot()["gps"]
+    assert status["state"] == "no_device" and status["fix"] is None and status["sky"] == []
+    mesh.loop.post(mesh._on_gps_status, dict(status, state="searching"))
+    assert wait_gps(server["broadcasts"], lambda p: p["state"] == "searching")
+    assert server["client"].post("/api/gps", json={}).status_code in (404, 405), \
+        "já não há configuração do GPS: só se lê"
+
+
+def test_local_position_carries_gps_details(wired):
+    server, iface = wired
+    server["mesh"]._on_local_position(38.7, -9.1, 80, True, {"source": "node", "sats_in_view": 7})
+    payload = server["mesh"].snapshot()["local_position"]
+    assert payload["source"] == "node" and payload["sats_in_view"] == 7 and payload["updated"] > 0

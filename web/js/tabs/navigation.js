@@ -25,6 +25,9 @@ export function mount(options = {}) {
 
   store.on('local-node-changed', renderLocalCard);
   store.on('local-position-changed', renderLocalCard);
+  store.on('gps-changed', renderGpsFeed);
+  store.on('language-changed', () => { renderLocalCard(); renderGpsFeed(); });
+  setInterval(() => { renderLocalCard(); renderGpsFeed(); }, 10_000);   // "há 20 s"
   store.on('nodes-changed', () => { renderLocalCard(); renderCompass(); renderGpsTable(); });
   store.on('selection-changed', () => { renderCompass(); renderGpsTable(); });
   store.on('search-changed', renderGpsTable);
@@ -45,6 +48,7 @@ export function mount(options = {}) {
   });
 
   renderLocalCard();
+  renderGpsFeed();
   renderCompass();
   renderGpsTable();
 }
@@ -55,18 +59,128 @@ function localLatLon() {
   return null;
 }
 
+/* "há 12 s" para o que muda ao segundo; fmtAgo só desce ao minuto. */
+function fmtAgoShort(epochSeconds) {
+  if (!epochSeconds) return '—';
+  const s = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds));
+  return s < 60 ? t('há {n} s', { n: s }) : fmtAgo(epochSeconds);
+}
+
+function satsText(used, inView) {
+  if (used != null && inView != null) return t('{used} usados · {view} à vista', { used, view: inView });
+  if (used != null) return t('{n} usados', { n: used });
+  if (inView != null) return t('{n} à vista', { n: inView });
+  return null;
+}
+
+function fixText(fixType) {
+  return fixType === 3 ? '3D' : (fixType === 2 ? '2D' : null);
+}
+
 function renderLocalCard() {
   const dl = document.getElementById('local-card');
   const ln = store.localNode || {};
   const pos = store.localPosition || {};
+  const source = { node: t('GPS do nó'), fixed: t('posição fixa') }[pos.source];
   const rows = [
     [t('Nome'), ln.node_id ? `${escapeHtml(ln.long_name || '—')} [${escapeHtml(ln.short_name || '')}]` : '—'],
     ['ID', escapeHtml(ln.node_id || '—')],
     ['GPS', t(ln.gps_enabled ? 'activo' : 'desactivado')],
     [t('Posição'), pos.found ? `${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}` : t(ln.has_position ? '⏳ a ler…' : '⚠ sem posição')],
-    ['Altitude', pos.alt != null ? `${pos.alt} m` : '—'],
+    ['Altitude', pos.alt != null ? `${Math.round(pos.alt)} m` : '—'],
   ];
+  if (pos.found) {
+    if (source) rows.push([t('Fonte'), escapeHtml(source)]);
+    const sats = satsText(pos.sats_used, pos.sats_in_view);
+    if (sats) rows.push([t('Satélites'), escapeHtml(sats)]);
+    const fix = fixText(pos.fix_type);
+    const dop = pos.hdop != null ? `HDOP ${Number(pos.hdop).toFixed(1)}` : null;
+    if (fix || dop) rows.push(['Fix', escapeHtml([fix, dop].filter(Boolean).join(' · '))]);
+    if (pos.precision_bits) rows.push([t('Precisão'), escapeHtml(t('reduzida pelo canal'))]);
+    if (pos.updated) rows.push([t('Actualizada'), escapeHtml(fmtAgoShort(pos.updated))]);
+  }
   dl.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+/* ── GPS do uConsole ao vivo (só leitura) ────────────────────────────── */
+function gpsStatusText(gps) {
+  const fix = gps.fix || {};
+  const via = gps.source === 'gpsmux' ? t('gps_via_mux') : (gps.source === 'serial' ? gps.path : '');
+  switch (gps.state) {
+    case 'busy': return t('gps_state_busy', { owner: gps.owner || '?' });
+    case 'no_device': return t('gps_state_no_device', { path: gps.path || '/dev/ttyAMA0' });
+    case 'searching': {
+      const n = fix.sats_in_view;
+      const text = n != null ? t('gps_state_searching_n', { n }) : t('gps_state_searching');
+      return via ? `${text} (${via})` : text;
+    }
+    case 'fix': return via ? t('gps_state_fix_via', { via }) : t('gps_state_fix');
+    default: return '';
+  }
+}
+
+/* Céu: centro = zénite, aro = horizonte, N em cima. Cor pelo SNR; os
+   satélites em uso cheios, os outros só com contorno. */
+function skySvg(sky) {
+  const C = 100, R = 88;
+  let out = `
+    <circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#30363d"/>
+    <circle cx="${C}" cy="${C}" r="${R * 2 / 3}" fill="none" stroke="#21262d"/>
+    <circle cx="${C}" cy="${C}" r="${R / 3}" fill="none" stroke="#21262d"/>
+    <line x1="${C}" y1="${C - R}" x2="${C}" y2="${C + R}" stroke="#21262d"/>
+    <line x1="${C - R}" y1="${C}" x2="${C + R}" y2="${C}" stroke="#21262d"/>
+    <text x="${C}" y="9" text-anchor="middle" fill="#f85149" font-size="10" font-weight="700">N</text>`;
+  for (const s of sky) {
+    if (s.el == null || s.az == null) continue;
+    const r = R * (1 - Math.max(0, Math.min(90, s.el)) / 90);
+    const a = (s.az - 90) * Math.PI / 180;
+    const x = C + r * Math.cos(a), y = C + r * Math.sin(a);
+    const snr = s.snr || 0;
+    const color = snr >= 35 ? '#3fb950' : (snr >= 25 ? '#d29922' : (snr > 0 ? '#f85149' : '#6e7681'));
+    out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${s.used ? color : 'none'}"
+                    stroke="${color}" stroke-width="1.5"><title>${escapeHtml(`${s.system} ${s.prn} · ${snr || '—'} dB`)}</title></circle>
+            <text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="middle" font-size="7"
+                  fill="${s.used ? '#0d1117' : color}">${s.prn}</text>`;
+  }
+  return out;
+}
+
+function renderGpsFeed() {
+  const gps = store.gps || {};
+  const status = document.getElementById('gps-feed-status');
+  const card = document.getElementById('gps-feed-card');
+  const skyEl = document.getElementById('gps-sky');
+  if (!status) return;
+  status.textContent = gpsStatusText(gps);
+  status.dataset.state = gps.state || '';
+
+  const fix = gps.fix;
+  const live = gps.state === 'fix' || gps.state === 'searching';
+  if (!fix || !live) {
+    card.hidden = true; card.innerHTML = '';
+    skyEl.toggleAttribute('hidden', true); skyEl.innerHTML = '';   // SVG: sem .hidden
+    return;
+  }
+  const rows = [];
+  if (gps.state === 'fix') {
+    rows.push([t('Posição'), `${fix.lat.toFixed(5)}, ${fix.lon.toFixed(5)}`]);
+    rows.push(['Altitude', fix.alt != null ? `${Math.round(fix.alt)} m` : '—']);
+  }
+  const sats = satsText(fix.sats_used, fix.sats_in_view);
+  if (sats) rows.push([t('Satélites'), sats]);
+  const fixType = fixText(fix.fix_type);
+  const dops = [fixType, fix.hdop != null ? `HDOP ${fix.hdop.toFixed(1)}` : null,
+    fix.pdop != null ? `PDOP ${fix.pdop.toFixed(1)}` : null].filter(Boolean).join(' · ');
+  if (dops) rows.push(['Fix', dops]);
+  if (fix.speed_mps != null) {
+    const course = fix.course != null ? ` · ${Math.round(fix.course)}° ${cardinal(fix.course)}` : '';
+    rows.push([t('Velocidade'), `${(fix.speed_mps * 3.6).toFixed(1)} km/h${course}`]);
+  }
+  card.innerHTML = rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('');
+  card.hidden = !rows.length;
+  const sky = gps.sky || [];
+  skyEl.innerHTML = skySvg(sky);
+  skyEl.toggleAttribute('hidden', !sky.length);
 }
 
 // Centro e raios da rosa dos ventos, partilhados por todo o desenho.

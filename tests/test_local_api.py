@@ -113,3 +113,23 @@ def test_send_validates_input(wired):  # noqa: F811
 
 def test_send_without_connection_is_503(server):  # noqa: F811
     assert server["client"].post("/api/local/send", json={"text": "x"}).status_code == 503
+
+
+def test_gps_live_in_local_api(server):  # noqa: F811
+    """GPS do uConsole ao vivo para o DashOS: no resumo e num endpoint leve."""
+    mesh = server["mesh"]
+    status = {"state": "fix", "source": "gpsmux", "owner": "", "path": "tcp://127.0.0.1:10110",
+              "error": "", "fix": {"fix": True, "lat": 38.69375, "lon": -9.297567, "alt": 95.4,
+                                   "fix_type": 3, "sats_used": 8, "sats_in_view": 12, "hdop": 0.9},
+              "sky": [{"system": "GPS", "prn": 4, "el": 40, "az": 83, "snr": 46, "used": True}],
+              "last_fix": time.time()}
+    mesh.loop.post(mesh._on_gps_status, status)
+    client = server["client"]
+    end = time.time() + 3
+    while client.get("/api/local/gps").get_json().get("state") != "fix" and time.time() < end:
+        time.sleep(0.02)
+    gps = client.get("/api/local/gps").get_json()
+    assert gps["source"] == "gpsmux" and gps["fix"]["sats_used"] == 8 and gps["time"] > 0
+    assert gps["sky"][0]["prn"] == 4 and gps["sky"][0]["used"] is True
+    assert client.get("/api/local/dash").get_json()["gps"]["fix"]["lat"] == 38.69375
+    assert client.get("/api/local/gps", environ_base=REMOTE).status_code == 403
